@@ -1,0 +1,40 @@
+{
+  "name": "technitium-metrics-exporter",
+  "version": "0.1.0",
+  "description": "Prometheus exporter for Technitium DNS Server",
+  "license": "Apache-2.0",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "files": [
+    "dist",
+    "LICENSE",
+    "README.md"
+  ],
+  "bin": {
+    "technitium-metrics-exporter": "dist/index.js"
+  },
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit",
+    "lint": "biome check .",
+    "format": "biome format --write .",
+    "test:unit": "node --experimental-strip-types --test \"test/unit/**/*.test.ts\"",
+    "test": "npm run test:unit",
+    "check:native-addons": "node --experimental-strip-types scripts/check-no-native-addons.ts",
+    "check:pack-allowlist": "node --experimental-strip-types scripts/check-pack-allowlist.ts",
+    "check:license-compound": "node --experimental-strip-types scripts/check-license-compound.ts",
+    "check": "npm run check:native-addons && npm run check:pack-allowlist && npm run check:license-compound"
+  },
+  "dependencies": {
+    "@prometheus-io/client": "^0.16.1",
+    "undici": "^8.10.2"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.13",
+    "@types/node": "^26.5.1",
+    "typescript": "^7.0.2"
+  }
+}

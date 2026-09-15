@@ -1,0 +1,9 @@
+title = "technitium-metrics-exporter gitleaks config"
+
+# No project-specific rules or allowlist entries yet. Add exceptions here only
+# once a real false positive is observed — do not preemptively allowlist a
+# path such as test/fixtures/, since that is exactly where a real secret
+# accidentally pasted into a hand-authored fixture would otherwise go
+# undetected.
+[extend]
+useDefault = true
