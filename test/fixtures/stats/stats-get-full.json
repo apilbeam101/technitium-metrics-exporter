@@ -1,0 +1,37 @@
+{
+  "response": {
+    "stats": {
+      "totalQueries": 100000,
+      "totalNoError": 90000,
+      "totalServerFailure": 500,
+      "totalNxDomain": 4000,
+      "totalRefused": 100,
+      "totalAuthoritative": 60000,
+      "totalRecursive": 40000,
+      "totalCached": 30000,
+      "totalBlocked": 5000,
+      "totalDropped": 100,
+      "totalClients": 250,
+      "zones": 11,
+      "cachedEntries": 1200,
+      "allowedZones": 0,
+      "blockedZones": 3,
+      "allowListZones": 0,
+      "blockListZones": 1
+    },
+    "queryResponseChartData": {
+      "labels": ["Authoritative", "Recursive", "Cached", "Blocked", "Dropped"],
+      "datasets": [{ "data": [60000, 40000, 30000, 5000, 100] }]
+    },
+    "protocolTypeChartData": {
+      "labels": ["Udp", "Tcp", "Tls", "Https", "Quic"],
+      "datasets": [{ "data": [80000, 15000, 2000, 2500, 500] }]
+    },
+    "queryTypeChartData": {
+      "labels": ["A", "AAAA", "NS", "MX", "TXT", "CNAME", "SOA", "PTR", "SRV", "DNSKEY"],
+      "datasets": [{ "data": [50000, 30000, 5000, 4000, 3000, 3000, 2000, 1500, 1000, 500] }]
+    }
+  },
+  "server": "dns-a",
+  "status": "ok"
+}

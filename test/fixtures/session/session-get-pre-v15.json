@@ -1,0 +1,30 @@
+{
+  "username": "exporter",
+  "tokenName": "prometheus-exporter",
+  "token": "REDACTED-EXAMPLE-TOKEN",
+  "info": {
+    "version": "13.4",
+    "uptimestamp": "2026-09-15T08:00:00.0000000Z",
+    "dnsServerDomain": "dns-c.example.com",
+    "defaultRecordTtl": 3600,
+    "defaultNsRecordTtl": 14400,
+    "defaultSoaRecordTtl": 900,
+    "useSoaSerialDateScheme": false,
+    "dnssecValidation": false,
+    "permissions": {
+      "Dashboard": { "canView": true, "canModify": false, "canDelete": false },
+      "Zones": { "canView": true, "canModify": false, "canDelete": false },
+      "Cache": { "canView": false, "canModify": false, "canDelete": false },
+      "Allowed": { "canView": false, "canModify": false, "canDelete": false },
+      "Blocked": { "canView": false, "canModify": false, "canDelete": false },
+      "Apps": { "canView": false, "canModify": false, "canDelete": false },
+      "DnsClient": { "canView": false, "canModify": false, "canDelete": false },
+      "DhcpServer": { "canView": false, "canModify": false, "canDelete": false },
+      "Logs": { "canView": false, "canModify": false, "canDelete": false },
+      "Administration": { "canView": false, "canModify": false, "canDelete": false },
+      "Settings": { "canView": false, "canModify": false, "canDelete": false }
+    }
+  },
+  "server": "dns-c",
+  "status": "ok"
+}

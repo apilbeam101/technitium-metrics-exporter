@@ -1,0 +1,5 @@
+{
+  "status": "error",
+  "errorMessage": "Example error condition encountered while processing the request",
+  "stackTrace": "System error: Example error condition encountered while processing the request\n   at ExampleHandler (request processing)\n   at ExampleDispatcher (routing)"
+}

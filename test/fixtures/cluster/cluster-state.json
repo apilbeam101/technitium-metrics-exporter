@@ -1,0 +1,48 @@
+{
+  "response": {
+    "clusterInitialized": true,
+    "dnsServerDomain": "dns-a.example.com",
+    "version": "15.4",
+    "clusterDomain": "example.com",
+    "heartbeatRefreshIntervalSeconds": 30,
+    "heartbeatRetryIntervalSeconds": 10,
+    "configRefreshIntervalSeconds": 900,
+    "configLastSynced": "2026-09-15T08:00:00Z",
+    "nodes": [
+      {
+        "id": 1342079372,
+        "name": "dns-a.example.com",
+        "url": "https://dns-a.example.com:53443/",
+        "type": "Primary",
+        "state": "Self",
+        "lastSeen": "0001-01-01T00:00:00"
+      },
+      {
+        "id": 1653399468,
+        "name": "dns-b.example.com",
+        "url": "https://dns-b.example.com:53443/",
+        "type": "Secondary",
+        "state": "Connected",
+        "lastSeen": "2026-09-15T07:59:30.0000000Z"
+      },
+      {
+        "id": 1843286864,
+        "name": "dns-c.example.com",
+        "url": "https://dns-c.example.com:53443/",
+        "type": "Secondary",
+        "state": "Unreachable",
+        "lastSeen": "2026-09-14T22:15:00.0000000Z"
+      },
+      {
+        "id": 1900000042,
+        "name": "dns-d.example.com",
+        "url": "https://dns-d.example.com:53443/",
+        "type": "Secondary",
+        "state": "Unknown",
+        "lastSeen": "0001-01-01T00:00:00"
+      }
+    ]
+  },
+  "server": "dns-a",
+  "status": "ok"
+}

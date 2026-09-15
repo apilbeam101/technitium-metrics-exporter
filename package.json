@@ -26,7 +26,8 @@
     "check:native-addons": "node --experimental-strip-types scripts/check-no-native-addons.ts",
     "check:pack-allowlist": "node --experimental-strip-types scripts/check-pack-allowlist.ts",
     "check:license-compound": "node --experimental-strip-types scripts/check-license-compound.ts",
-    "check": "npm run check:native-addons && npm run check:pack-allowlist && npm run check:license-compound"
+    "check:fixtures": "node --experimental-strip-types scripts/sanitize-fixtures.ts --check test/fixtures",
+    "check": "npm run check:native-addons && npm run check:pack-allowlist && npm run check:license-compound && npm run check:fixtures"
   },
   "dependencies": {
     "@prometheus-io/client": "^0.16.1",

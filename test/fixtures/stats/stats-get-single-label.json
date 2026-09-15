@@ -1,0 +1,37 @@
+{
+  "response": {
+    "stats": {
+      "totalQueries": 100,
+      "totalNoError": 95,
+      "totalServerFailure": 2,
+      "totalNxDomain": 2,
+      "totalRefused": 1,
+      "totalAuthoritative": 100,
+      "totalRecursive": 0,
+      "totalCached": 0,
+      "totalBlocked": 0,
+      "totalDropped": 0,
+      "totalClients": 1,
+      "zones": 1,
+      "cachedEntries": 0,
+      "allowedZones": 0,
+      "blockedZones": 0,
+      "allowListZones": 0,
+      "blockListZones": 0
+    },
+    "queryResponseChartData": {
+      "labels": ["Authoritative"],
+      "datasets": [{ "data": [100] }]
+    },
+    "protocolTypeChartData": {
+      "labels": ["Udp"],
+      "datasets": [{ "data": [100] }]
+    },
+    "queryTypeChartData": {
+      "labels": ["A"],
+      "datasets": [{ "data": [100] }]
+    }
+  },
+  "server": "dns-a",
+  "status": "ok"
+}

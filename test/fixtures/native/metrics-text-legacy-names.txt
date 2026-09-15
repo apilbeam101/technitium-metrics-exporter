@@ -1,0 +1,28 @@
+# HELP uptime_seconds Number of seconds elapsed since the DNS server process started.
+# TYPE uptime_seconds gauge
+uptime_seconds 12345
+# HELP start_time Time in milliseconds since the Unix epoch when the DNS server process started.
+# TYPE start_time gauge
+start_time 1700000000000
+# TYPE total_queries counter
+total_queries 100000
+# TYPE total_no_error counter
+total_no_error 90000
+# TYPE total_server_failure counter
+total_server_failure 500
+# TYPE total_nx_domain counter
+total_nx_domain 4000
+# TYPE total_refused counter
+total_refused 100
+# TYPE total_authoritative counter
+total_authoritative 60000
+# TYPE total_recursive counter
+total_recursive 40000
+# TYPE total_cached counter
+total_cached 30000
+# TYPE total_blocked counter
+total_blocked 5000
+# TYPE total_dropped counter
+total_dropped 100
+# TYPE total_clients counter
+total_clients 250
