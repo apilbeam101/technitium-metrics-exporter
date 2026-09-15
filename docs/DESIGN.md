@@ -169,6 +169,18 @@ logs and error pages.
 13. **`/api/settings/get` returns secrets in plaintext** — TSIG shared secrets
     and TLS certificate passwords. Out of scope ([§4.2](#42-scope)).
 
+14. **The success envelope's shape is not uniform across endpoints.**
+    `/api/zones/list`, `/api/dashboard/stats/get` and `/api/admin/cluster/state`
+    all wrap their payload under a `response` key alongside the top-level
+    `status`/`server` fields. `/api/user/session/get`'s own envelope is flat
+    instead: `info`, `permissions` and the echoed token (point 11 above) sit
+    directly alongside `status`/`server`, with no `response` wrapper. Each
+    endpoint's parser is therefore told which shape to expect rather than the
+    envelope layer inferring it — inferring "no `response` key" as "this
+    endpoint is flat" would silently reclassify a wrapped endpoint that lost
+    its `response` key (an upstream regression) as a valid flat response
+    instead of a parse failure.
+
 ### 3.3 Bounded enumerations
 
 | Set | Values |

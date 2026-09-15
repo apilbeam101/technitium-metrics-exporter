@@ -23,7 +23,11 @@ type EnvVars = Readonly<Record<string, string | undefined>>;
 
 // D§6.1: case-insensitive, must start with an alphanumeric.
 const TARGET_NAME_PATTERN = /^[a-z0-9][a-z0-9_-]*$/i;
-const BASE_URL_PATTERN = /^https?:\/\/\S+$/i;
+// No "?" or "#": http/client.ts appends the allowlisted path directly onto
+// this string rather than parsing and reconstructing it (D§6.1), so a query
+// string or fragment here would swallow or discard that path instead of
+// merely prefixing it.
+const BASE_URL_PATTERN = /^https?:\/\/[^\s?#]+$/i;
 
 // Matched case-insensitively so that a wrong-case key (e.g. a lowercased
 // technitium_api_token__dns_a) is still recognised as an override *attempt*

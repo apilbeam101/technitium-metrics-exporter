@@ -95,6 +95,20 @@ describe("validate — targets", () => {
     );
   });
 
+  it("rejects a base URL carrying a query string or fragment", () => {
+    // http/client.ts appends the allowlisted path directly onto baseUrl
+    // rather than parsing and reconstructing it (D§6.1); a "?" or "#" here
+    // would swallow or discard that path instead of merely prefixing it.
+    assert.throws(
+      () => validate(baseVars({ TECHNITIUM_TARGETS: "dns-a=https://dns-a.example.com?x=1" })),
+      /invalid base URL/,
+    );
+    assert.throws(
+      () => validate(baseVars({ TECHNITIUM_TARGETS: "dns-a=https://dns-a.example.com#x" })),
+      /invalid base URL/,
+    );
+  });
+
   it("rejects duplicate target names", () => {
     assert.throws(
       () =>
