@@ -124,7 +124,7 @@ per collector.
 
 ### `api/time.ts`
 
-The .NET timestamp rules from D§3.2.9: sentinel detection, explicit UTC
+The .NET timestamp rules from D§3.2.10: sentinel detection, explicit UTC
 interpretation of suffix-less values, and tolerance of seven fractional digits.
 
 ### `metrics/state-set.ts`
@@ -186,8 +186,14 @@ captures in Phase 14. Coverage is chosen to hit every documented hazard:
   `stackTrace`
 - `metrics/text` in **both** name spellings (D§3.2.2)
 - a zone list spanning all seven types, internal zones, and each
-  conditional-field combination (D§3.2.7)
-- a cluster response with a never-sentinel `lastSeen` and an `Unknown` state
+  conditional-field combination (D§3.2.7) — `internal` present only on the
+  server's own system zones, never as `false` on an ordinary zone
+- a `session/get` with `clusterInitialized: true` and an embedded peer
+  inventory: the node's own entry (no `lastSeen`), a connected peer (an
+  ordinary `lastSeen`), and enough peers to cover all four `state` values
+  (D§3.2.9)
+- an `admin/cluster/state` response with a never-sentinel `lastSeen` and an
+  `Unknown` state
 - a `protocolTypeChartData` with a single label (D§3.2.8)
 - a pre-v15.0 `session/get`
 
@@ -230,10 +236,22 @@ cluster-initialised flag, and permission map. For each **enabled** collector
 whose permission is absent: one loud warning, mark it skipped, and set
 `technitium_collector_success{collector} 0` — never retry-and-error every cycle.
 
+`session/get`'s own response also carries the cluster peer inventory whenever
+`clusterInitialized` is true (D§3.2.9), with no extra permission or call
+needed. This phase therefore also owns `technitium_cluster_node_state`,
+`technitium_cluster_node_last_seen_timestamp_seconds` and
+`technitium_cluster_nodes` (D§5.6) — the peer address and URL fields in that
+same inventory are parsed and then discarded, never exported (D§4.2). The
+remaining cluster metrics (heartbeat/refresh intervals, config sync time) stay
+with the `Administration: View`-gated collector in Phase 8.
+
 `technitium_up` derives from the actual call outcome.
 
 **Exit:** tests prove `technitium_up` is 0 for an unreachable target, 0 for a
-rejected token, and 1 only on real success (N6).
+rejected token, and 1 only on real success (N6); a clustered fixture produces
+the four-value peer state set including `Unknown`, a peer removed between
+renders disappears from it, and a non-clustered fixture produces none of the
+three peer metrics.
 
 ## Phase 5 — Native counter normalisation
 
@@ -257,9 +275,12 @@ The core deliverable: R1 through R4.
 `zone-collector.ts`.
 
 Zone-family classification — primary-family versus secondary-family —
-determines which conditional metrics exist at all. Internal-zone filter with an
-exported excluded count. State-set rendering for `dnssecStatus`.
-`notifyFailedFor` reduced to a count.
+determines which conditional metrics exist at all. Internal-zone filter keyed
+on `internal === true` — the field is absent, not `false`, on every ordinary
+zone (D§3.2.7) — with an exported excluded count. State-set rendering for
+`dnssecStatus`. `notifyFailedFor` reduced to a count. The parser tolerates and
+ignores fields outside this design's metric surface (e.g. `catalog`) rather
+than failing on them.
 
 **Exit:** tests for all seven zone types; conditional fields absent rather than
 zero; a zone removed between two renders disappears from the output;
@@ -301,18 +322,23 @@ one target hard-down leaves the other's series intact with `up = 1`; graceful
 shutdown completes; bare `/metrics` returns only global series; an unknown
 target returns 400.
 
-## Phase 8 — Cluster collector
+## Phase 8 — Cluster configuration-detail collector
 
-R7, opt-in.
+Opt-in, `Administration: View`-gated. The peer state set itself
+(`technitium_cluster_node_state` and its neighbours) is already produced by
+Phase 4 from `session/get`, with no permission — this phase adds only the
+four metrics that call doesn't carry: heartbeat/refresh intervals and config
+sync time (D§5.6).
 
 `api/cluster.ts`, `metrics/cluster-metrics.ts`, `cluster-collector.ts`.
 
-Four-value state set with an unknown-value counter; never-sentinel handling;
-auto-skip when `Administration: View` is absent; departed peers' series
-disappear. Runs on its own cadence via `refresh-cache`.
+Never-sentinel handling for `admin/cluster/state`'s own `lastSeen`; auto-skip
+when `Administration: View` is absent. Runs on its own cadence via
+`refresh-cache`.
 
-**Exit:** tests for the `Unknown` state, the never-sentinel, a peer removed
-between renders, and auto-skip.
+**Exit:** tests for the never-sentinel and for auto-skip; a test proving that
+disabling this collector does not remove the Phase-4-sourced peer state set
+from the render.
 
 ## Phase 9 — Statistics window collector
 
@@ -335,7 +361,7 @@ silently misaligned series; the interval floor is enforced.
 
 `poller/self-metrics.ts`; the `_series` cardinality tripwire; `dump-raw.ts`
 writing sanitised JSON to stdout with all logging diverted to stderr, and hard
-redaction of the echoed session token (D§3.2.10) and of `stackTrace`.
+redaction of the echoed session token (D§3.2.11) and of `stackTrace`.
 
 `scripts/generate-metrics-doc.ts` produces `docs/METRICS.md`, with a drift test.
 

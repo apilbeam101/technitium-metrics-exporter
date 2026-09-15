@@ -82,11 +82,11 @@ The behaviours below are current as of server version 15.4.0 (2026-09-14).
 
 | Endpoint | Permission | Purpose |
 |---|---|---|
-| `GET /api/user/session/get` | **none** | Version, node identity, cluster flag, and the token's own permission map |
+| `GET /api/user/session/get` | **none** | Version, node identity, cluster flag, cluster peer inventory when clustered, and the token's own permission map |
 | `GET /api/dashboard/metrics/text` | `Dashboard: View` | Lifetime counters |
 | `GET /api/zones/list` | `Zones: View` **and per-zone `View`** | Zone health |
 | `GET /api/dashboard/stats/get` | `Dashboard: View` | Protocol and response-type split; live cache and blocklist gauges |
-| `GET /api/admin/cluster/state` | `Administration: View` | Cluster peer state |
+| `GET /api/admin/cluster/state` | `Administration: View` | Cluster configuration detail — heartbeat and refresh intervals, config sync time |
 
 Authentication is `Authorization: Bearer <token>`. The legacy `token` query
 parameter is an explicit non-goal: it places the credential into URLs, access
@@ -123,30 +123,50 @@ logs and error pages.
    data. This collector therefore runs on its own much slower cadence, with an
    enforced minimum interval.
 
-7. **Field presence in `/api/zones/list` is conditional.** `expiry`,
-   `isExpired` and `syncFailed` appear only on secondary-family zones;
-   `notifyFailed` and `notifyFailedFor` only on primary-family, non-internal
-   zones; `internal` is absent on some entries. These are exported as absent
-   series, never as zero.
+7. **Field presence in `/api/zones/list` is conditional, and the field set is
+   larger than the metric surface uses.** `expiry`, `isExpired` and
+   `syncFailed` appear only on secondary-family zones; `notifyFailed` and
+   `notifyFailedFor` only on primary-family, non-internal zones; `internal` is
+   present, and only ever `true`, on the server's own built-in system zones,
+   and otherwise absent — it is never reported as `false`. A zone that belongs
+   to a catalog also carries a `catalog` field naming that catalog
+   ([§4.2](#42-scope)). These conditional fields are exported as absent
+   series, never as zero; fields outside this design's stated metric surface
+   are read and ignored rather than treated as a parse failure.
 
 8. **Chart data is positional and sparse.** `labels[]` and
    `datasets[0].data[]` are parallel arrays, zipped by index. A protocol with
    zero traffic is **omitted from `labels` entirely** rather than reported as
    zero, and `queryTypeChartData` is trimmed to the top ten by default.
 
-9. **.NET timestamp hazards.** `expiry` and `lastModified` are ISO 8601 with
-   seven fractional digits. Cluster `lastSeen` uses `"0001-01-01T00:00:00"` as
-   a "never" sentinel, **with no `Z` suffix**, so a naive parse reads it as
-   local time. Sentinels map to an absent series; suffix-less timestamps are
-   explicitly interpreted as UTC.
+9. **`/api/user/session/get` returns a full cluster peer inventory, with no
+   permission requirement, the moment the target node has clustering
+   initialised.** `clusterInitialized: true` is accompanied by a peer list,
+   each entry carrying identity (`name`), role (`type`), connection state
+   (`state`), a `lastSeen` timestamp, and a network address and URL. Because
+   this call needs no grant and already runs every cycle to establish
+   `technitium_up`, peer identity, role and connection state are available
+   whether or not the separately-gated cluster collector is even enabled —
+   see [§5.6](#56-cluster). The address and URL fields arrive the same way,
+   unasked for, and are read and discarded rather than exported (also
+   [§5.6](#56-cluster)). This peer-list `lastSeen` is absent for the node's
+   own entry and, when present for a peer, is an ordinary timestamp; it is a
+   distinct field from the `lastSeen` in point 10 below, which belongs to the
+   separate cluster configuration call.
 
-10. **`/api/user/session/get` echoes the bearer token** back in its own
+10. **.NET timestamp hazards.** `expiry` and `lastModified` are ISO 8601 with
+    seven fractional digits. `/api/admin/cluster/state`'s own `lastSeen` uses
+    `"0001-01-01T00:00:00"` as a "never" sentinel, **with no `Z` suffix**, so a
+    naive parse reads it as local time. Sentinels map to an absent series;
+    suffix-less timestamps are explicitly interpreted as UTC.
+
+11. **`/api/user/session/get` echoes the bearer token** back in its own
     response body. It is redacted everywhere (N5).
 
-11. **`{"status":"error"}` responses carry `stackTrace`.** Only `errorMessage`
+12. **`{"status":"error"}` responses carry `stackTrace`.** Only `errorMessage`
     is logged at info level or above.
 
-12. **`/api/settings/get` returns secrets in plaintext** — TSIG shared secrets
+13. **`/api/settings/get` returns secrets in plaintext** — TSIG shared secrets
     and TLS certificate passwords. Out of scope ([§4.2](#42-scope)).
 
 ### 3.3 Bounded enumerations
@@ -195,7 +215,8 @@ network even by mistake.
 | Session / identity | 30 s | on — requires no permission |
 | Lifetime counters | 30 s | on |
 | Zone health | 30 s | on |
-| Cluster state | 60 s | **off** — costs `Administration: View` |
+| Cluster peer state | 30 s (part of session / identity) | on — requires no permission when the target is clustered ([§3.2.9](#32-behaviours-that-shape-the-design)) |
+| Cluster configuration detail | 60 s | **off** — costs `Administration: View` |
 | Statistics window split | 300 s | **off** — upstream side effect ([§3.2.6](#32-behaviours-that-shape-the-design)) |
 
 **Excluded — permanent non-goals, not deferrals**
@@ -204,7 +225,7 @@ network even by mistake.
   and exporting them writes client IP addresses and resolution history into a
   metrics store.
 - **Server settings inventory** — the response contains plaintext secrets
-  ([§3.2.12](#32-behaviours-that-shape-the-design)). A read-only, secret-free
+  ([§3.2.13](#32-behaviours-that-shape-the-design)). A read-only, secret-free
   exporter should not touch an endpoint whose only content is secrets.
 - **DHCP scopes and leases** — outside a DNS exporter's remit, and would carry
   its own non-ISO `MM/DD/YYYY HH:mm:ss` date-parsing burden for no benefit to
@@ -219,6 +240,16 @@ network even by mistake.
 - **Cluster-aggregated statistics** — the API can aggregate statistics across a
   cluster from a single node. Deliberately unused: per-node identity is the
   point of the multi-target model (R8).
+- **Catalog zone membership** — a zone belonging to a catalog carries a
+  `catalog` field naming it ([§3.2.7](#32-behaviours-that-shape-the-design)).
+  This is a zone-provisioning relationship, not a health signal, and no
+  requirement calls for it.
+- **Cluster peer network addresses and connection URLs** — the peer inventory
+  that supplies `type` and `state` ([§3.2.9](#32-behaviours-that-shape-the-design))
+  carries each peer's address and URL alongside them. They are received
+  whether or not the exporter wants them, and are read and discarded rather
+  than exported: a compromised metrics store should not become an inventory
+  of internal network addresses, and no requirement calls for them.
 
 ### 4.3 Multi-target model
 
@@ -415,18 +446,37 @@ itself: `technitium_cached_entries`, `technitium_allowed_zones`,
 
 ### 5.6 Cluster
 
-| Metric | Type | Labels |
-|---|---|---|
-| `technitium_cluster_node_state` | gauge | `node_name`, `node_type`, `state` — state set over all four values |
-| `technitium_cluster_node_last_seen_timestamp_seconds` | gauge | `node_name` — absent for the never-sentinel |
-| `technitium_cluster_config_last_synced_timestamp_seconds` | gauge | — |
-| `technitium_cluster_nodes` | gauge | — |
-| `technitium_cluster_heartbeat_refresh_interval_seconds` | gauge | — |
-| `technitium_cluster_heartbeat_retry_interval_seconds` | gauge | — |
-| `technitium_cluster_config_refresh_interval_seconds` | gauge | — |
+Three of these seven metrics are sourced from the peer inventory in
+`/api/user/session/get` ([§3.2.9](#32-behaviours-that-shape-the-design)) and
+therefore need **no permission** — they are populated on every poll cycle a
+clustered target already makes for `technitium_up`, independently of whether
+the remaining four are enabled. Those four need a separate,
+`Administration: View`-gated call to `/api/admin/cluster/state` on a slower
+cadence, because that configuration detail is not exposed anywhere else.
 
-The request never asks for peer IP inventories. The exporter does not need
-them, so it does not request them.
+| Metric | Type | Labels | Source | Permission |
+|---|---|---|---|---|
+| `technitium_cluster_node_state` | gauge | `node_name`, `node_type`, `state` — state set over all four values | `session/get` peer inventory | none |
+| `technitium_cluster_node_last_seen_timestamp_seconds` | gauge | `node_name` — absent for the node's own entry | `session/get` peer inventory | none |
+| `technitium_cluster_nodes` | gauge | — | `session/get` peer inventory | none |
+| `technitium_cluster_config_last_synced_timestamp_seconds` | gauge | — | `admin/cluster/state` | `Administration: View` |
+| `technitium_cluster_heartbeat_refresh_interval_seconds` | gauge | — | `admin/cluster/state` | `Administration: View` |
+| `technitium_cluster_heartbeat_retry_interval_seconds` | gauge | — | `admin/cluster/state` | `Administration: View` |
+| `technitium_cluster_config_refresh_interval_seconds` | gauge | — | `admin/cluster/state` | `Administration: View` |
+
+`technitium_cluster_node_last_seen_timestamp_seconds`'s never-sentinel handling
+([§3.2.10](#32-behaviours-that-shape-the-design)) is documented for
+`admin/cluster/state`'s own `lastSeen` field. The `session/get` peer
+inventory's `lastSeen` is a distinct field: observed absent for a node's own
+entry and as an ordinary timestamp for a peer that has connected; its
+behaviour for a peer that has never connected is unconfirmed. Both an absent
+key and a never-sentinel resolve to the same absent series, so either
+behaviour renders correctly without a code change once confirmed.
+
+Peer network addresses and connection URLs arrive in the same `session/get`
+peer inventory that supplies `type` and `state`, unrequested and regardless of
+whether the configuration-detail collector is enabled ([§4.2](#42-scope)).
+They are read and discarded, never exported.
 
 ### 5.7 Exporter self-observability
 
@@ -487,10 +537,10 @@ TECHNITIUM_TLS_INSECURE_SKIP_VERIFY__DNS_A=false
 METRICS_PORT=10053
 METRICS_BIND_ADDRESS=0.0.0.0
 POLL_INTERVAL_SECONDS=30
-CLUSTER_POLL_INTERVAL_SECONDS=60
+CLUSTER_POLL_INTERVAL_SECONDS=60     # configuration-detail collector only; peer state rides the main poll
 STATS_POLL_INTERVAL_SECONDS=300      # hard floor 60
 REQUEST_TIMEOUT_SECONDS=15
-ENABLE_CLUSTER_COLLECTOR=false
+ENABLE_CLUSTER_COLLECTOR=false       # gates configuration-detail metrics only (§5.6); peer state needs no flag
 ENABLE_STATS_COLLECTOR=false
 ENABLE_STATS_QUERY_TYPES=false
 ZONES_INCLUDE_INTERNAL=false
@@ -523,14 +573,28 @@ paths is rejected.
 ### 6.4 Least-privilege token
 
 1. Create a dedicated user. Never `admin`.
-2. Grant a group `View` on `Dashboard` and `Zones`, **and `View` on each
-   individual zone**, because the zone list is filtered per zone
-   ([§3.2.4](#32-behaviours-that-shape-the-design)).
-3. Only if the cluster collector is wanted, add `Administration: View` — and
-   note that this grant also exposes users, groups and sessions to that token.
-   `technitium_cluster_initialized` needs no grant at all, so basic "is
-   clustering up" monitoring does not require it.
-4. Create a non-expiring API token once, and store it as a secret.
+2. **A newly created non-admin user already has `View` on every section
+   except `Administration` and `Settings` — this is default behaviour, not
+   something observed only in one environment.** That default includes
+   `Zones` at the section level, but does not extend to individual zones: the
+   zone list is filtered per zone, so `View` must still be granted on each
+   zone the exporter should see ([§3.2.4](#32-behaviours-that-shape-the-design)).
+3. Because most sections default to granted, and this exporter only reads
+   `Dashboard` and `Zones`, explicitly restrict `View` on every section it
+   does not use: `Cache`, `Allowed`, `Blocked`, `Apps`, `DnsClient`,
+   `DhcpServer`, `Logs`. None of this default access includes `Modify` or
+   `Delete`, so it is not a write exposure, but it is a wider read blast
+   radius than "grant only what's listed" implies — a compromised token could
+   otherwise read DHCP leases, installed apps and logs, none of which this
+   exporter touches. `Settings` and `Administration` are already denied by
+   default and need no restricting.
+4. Only if the cluster **configuration-detail** metrics are wanted (heartbeat
+   and refresh intervals, config sync time — [§5.6](#56-cluster)), add
+   `Administration: View`, and note that this grant also exposes users, groups
+   and sessions to that token. Basic cluster peer state and
+   `technitium_cluster_initialized` need no grant at all, so "is clustering
+   up, and are peers connected" monitoring does not require it.
+5. Create a non-expiring API token once, and store it as a secret.
 
 The exporter never needs, accepts or stores a password.
 

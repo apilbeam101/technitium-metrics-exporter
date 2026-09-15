@@ -55,16 +55,24 @@ describe("zones/list fixture", () => {
     assert.ok(internalZones.length >= 1);
   });
 
-  it("sets internal: false explicitly on ordinary non-internal zones", () => {
+  it("never reports internal: false — real captures show it present as true, or absent entirely", () => {
     const zones = loadZones();
-    const explicitlyNonInternal = zones.filter((z) => z.internal === false);
-    assert.ok(explicitlyNonInternal.length > 0);
+    for (const zone of zones) {
+      assert.notEqual(zone.internal, false, `${zone.name} reports internal: false`);
+    }
   });
 
-  it("has at least one zone where the internal key is genuinely absent, preserving the absent-key hazard", () => {
+  it("leaves internal genuinely absent on every ordinary, non-system zone", () => {
     const zones = loadZones();
-    const absentKeyZones = zones.filter((z) => !Object.hasOwn(z, "internal"));
-    assert.ok(absentKeyZones.length >= 1, "no zone exercises the genuinely-absent internal key");
+    const ordinaryZones = zones.filter((z) => z.internal !== true);
+    assert.ok(ordinaryZones.length > 0, "no ordinary zone to exercise the absent-key case");
+    for (const zone of ordinaryZones) {
+      assert.equal(
+        Object.hasOwn(zone, "internal"),
+        false,
+        `${zone.name} should not carry an internal key`,
+      );
+    }
   });
 
   it("exposes expiry, isExpired and syncFailed only on secondary-family zones", () => {
@@ -130,7 +138,7 @@ describe("zones/list fixture", () => {
       assert.equal(
         hasNotifyFields,
         expected,
-        `${zone.name} (${zone.type}, internal=${zone.internal ?? false}) has unexpected notify field presence`,
+        `${zone.name} (${zone.type}, internal=${zone.internal ?? "absent"}) has unexpected notify field presence`,
       );
     }
   });

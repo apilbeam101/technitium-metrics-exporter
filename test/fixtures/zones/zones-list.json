@@ -4,7 +4,6 @@
       {
         "name": "example.com",
         "type": "Primary",
-        "internal": false,
         "disabled": false,
         "dnssecStatus": "SignedWithNSEC",
         "soaSerial": 2026091001,
@@ -15,7 +14,6 @@
       {
         "name": "mail.example.com",
         "type": "Primary",
-        "internal": false,
         "disabled": false,
         "dnssecStatus": "SignedWithNSEC3",
         "soaSerial": 2026091002,
@@ -26,7 +24,6 @@
       {
         "name": "example.org",
         "type": "Catalog",
-        "internal": false,
         "disabled": false,
         "dnssecStatus": "Unsigned",
         "soaSerial": 2026090501,
@@ -48,7 +45,6 @@
       {
         "name": "stale.example.com",
         "type": "Secondary",
-        "internal": false,
         "disabled": false,
         "dnssecStatus": "SignedWithNSEC",
         "soaSerial": 2026081501,
@@ -60,7 +56,6 @@
       {
         "name": "expiryless.example.com",
         "type": "Secondary",
-        "internal": false,
         "disabled": false,
         "dnssecStatus": "Unsigned",
         "soaSerial": 2026090801,
@@ -71,7 +66,6 @@
       {
         "name": "fwd.example.com",
         "type": "Forwarder",
-        "internal": false,
         "disabled": false,
         "dnssecStatus": "Unsigned",
         "soaSerial": 0,
@@ -80,7 +74,6 @@
       {
         "name": "sub.example.com",
         "type": "Stub",
-        "internal": false,
         "disabled": true,
         "dnssecStatus": "Unsigned",
         "soaSerial": 2026060101,
@@ -89,7 +82,6 @@
       {
         "name": "secfwd.example.com",
         "type": "SecondaryForwarder",
-        "internal": false,
         "disabled": false,
         "dnssecStatus": "Unsigned",
         "soaSerial": 2026091003,
@@ -101,7 +93,6 @@
       {
         "name": "seccat.example.com",
         "type": "SecondaryCatalog",
-        "internal": false,
         "disabled": false,
         "dnssecStatus": "Unsigned",
         "soaSerial": 2026091004,
