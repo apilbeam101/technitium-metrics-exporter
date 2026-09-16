@@ -1,7 +1,7 @@
 import { type Dispatcher, request as undiciRequest } from "undici";
 import type { Secret } from "../config/secret.ts";
 import type { Clock } from "./clock.ts";
-import { TechnitiumHttpError } from "./errors.ts";
+import { type PollErrorReason, TechnitiumHttpError } from "./errors.ts";
 import { assertPathAllowed } from "./path-allowlist.ts";
 import { withBudgetedRetry } from "./retry.ts";
 
@@ -10,7 +10,18 @@ export interface RawResponse {
   readonly body: string;
 }
 
-export type OnRawResponse = (response: RawResponse) => void;
+// D§5.7's telemetry for technitium_exporter_upstream_requests_total{endpoint,
+// status_code} and its duration counterpart, fired once per real HTTP attempt
+// (including a retried one) — including an attempt that never got a response
+// at all (network/timeout), which is why it carries a PollErrorReason instead
+// of a statusCode in that case. Either branch stays a bounded label value
+// (N7): a real numeric status code, or one of http/errors.ts's own fixed
+// reason strings — never a free-form error message.
+export type UpstreamAttemptOutcome =
+  | { readonly path: string; readonly durationMs: number; readonly statusCode: number }
+  | { readonly path: string; readonly durationMs: number; readonly reason: PollErrorReason };
+
+export type OnUpstreamAttempt = (outcome: UpstreamAttemptOutcome) => void;
 
 export interface HttpClientOptions {
   readonly baseUrl: string;
@@ -18,7 +29,7 @@ export interface HttpClientOptions {
   readonly dispatcher: Dispatcher;
   readonly clock: Clock;
   readonly budgetMs: number;
-  readonly onRawResponse?: OnRawResponse;
+  readonly onUpstreamAttempt?: OnUpstreamAttempt;
 }
 
 // D§6.1: the base URL is an opaque prefix, never parsed or reconstructed —
@@ -66,7 +77,7 @@ export class HttpClient {
   readonly #dispatcher: Dispatcher;
   readonly #clock: Clock;
   readonly #budgetMs: number;
-  readonly #onRawResponse: OnRawResponse | undefined;
+  readonly #onUpstreamAttempt: OnUpstreamAttempt | undefined;
 
   constructor(options: HttpClientOptions) {
     this.#baseUrl = options.baseUrl;
@@ -74,7 +85,7 @@ export class HttpClient {
     this.#dispatcher = options.dispatcher;
     this.#clock = options.clock;
     this.#budgetMs = options.budgetMs;
-    this.#onRawResponse = options.onRawResponse;
+    this.#onUpstreamAttempt = options.onUpstreamAttempt;
   }
 
   async get(path: string, query?: Readonly<Record<string, string>>): Promise<RawResponse> {
@@ -83,7 +94,7 @@ export class HttpClient {
 
     return withBudgetedRetry(
       { clock: this.#clock, budgetMs: this.#budgetMs, isRetryable: isRetryableReason },
-      (remainingMs) => this.#performAttempt(url, remainingMs),
+      (remainingMs) => this.#performAttempt(path, url, remainingMs),
     );
   }
 
@@ -91,7 +102,8 @@ export class HttpClient {
   // reset or stall while streaming the body is exactly as much a network/
   // timeout failure as one during connect, and must carry the same
   // PollErrorReason rather than escaping unclassified.
-  async #performAttempt(url: URL, remainingMs: number): Promise<RawResponse> {
+  async #performAttempt(path: string, url: URL, remainingMs: number): Promise<RawResponse> {
+    const startedAt = this.#clock.elapsed();
     let statusCode: number;
     let body: string;
     try {
@@ -111,17 +123,21 @@ export class HttpClient {
       statusCode = response.statusCode;
       body = await response.body.text();
     } catch (error) {
+      const durationMs = this.#clock.elapsed() - startedAt;
       if (error instanceof Error && error.name === "TimeoutError") {
+        this.#onUpstreamAttempt?.({ path, durationMs, reason: "timeout" });
         throw new TechnitiumHttpError("timeout", `request to ${url.pathname} timed out`, {
           cause: error,
         });
       }
+      this.#onUpstreamAttempt?.({ path, durationMs, reason: "network" });
       throw new TechnitiumHttpError("network", `request to ${url.pathname} failed`, {
         cause: error,
       });
     }
 
-    this.#onRawResponse?.({ statusCode, body });
+    const durationMs = this.#clock.elapsed() - startedAt;
+    this.#onUpstreamAttempt?.({ path, durationMs, statusCode });
 
     if (statusCode >= 500) {
       throw new TechnitiumHttpError("http_5xx", `${url.pathname} returned HTTP ${statusCode}`);

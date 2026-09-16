@@ -100,6 +100,40 @@ describe("createLogger", () => {
     assert.notEqual(parsed.time, "not-a-time");
   });
 
+  it("diverts every level to stderr when allLogsToStderr is set, leaving stdout untouched", () => {
+    const out = captureStream(process.stdout);
+    const err = captureStream(process.stderr);
+    try {
+      const logger = createLogger({ level: "debug", format: "text", allLogsToStderr: true });
+      logger.debug("debug message");
+      logger.info("info message");
+      logger.warn("warn message");
+      logger.error("error message");
+    } finally {
+      out.restore();
+      err.restore();
+    }
+
+    assert.equal(out.lines.length, 0);
+    assert.equal(err.lines.length, 4);
+  });
+
+  it("keeps the ordinary stdout/stderr split when allLogsToStderr is explicitly false", () => {
+    const out = captureStream(process.stdout);
+    const err = captureStream(process.stderr);
+    try {
+      const logger = createLogger({ level: "debug", format: "text", allLogsToStderr: false });
+      logger.debug("debug message");
+      logger.warn("warn message");
+    } finally {
+      out.restore();
+      err.restore();
+    }
+
+    assert.equal(out.lines.length, 1);
+    assert.equal(err.lines.length, 1);
+  });
+
   it("never lets a Secret-wrapped field value reach a log line, in either format", () => {
     const secret = new Secret("super-secret-value");
 

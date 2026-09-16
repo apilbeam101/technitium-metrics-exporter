@@ -1,14 +1,16 @@
 import { Registry } from "@prometheus-io/client";
 import type { AppConfig, TargetConfig } from "../config/types.ts";
 import { createAgent } from "../http/agent.ts";
-import { HttpClient } from "../http/client.ts";
+import { HttpClient, type OnUpstreamAttempt } from "../http/client.ts";
 import type { Clock } from "../http/clock.ts";
+import type { PollErrorReason } from "../http/errors.ts";
 import { ClusterCollector } from "../metrics/cluster-collector.ts";
 import { NativeCollector } from "../metrics/native-collector.ts";
 import { SessionCollector } from "../metrics/session-collector.ts";
 import { StatsCollector } from "../metrics/stats-collector.ts";
 import { ZoneCollector } from "../metrics/zone-collector.ts";
 import { PollCycleTracker } from "./cache.ts";
+import { SelfMetrics } from "./self-metrics.ts";
 import { TargetPoller } from "./target-poller.ts";
 
 // These four enabled-here collectors' own required permission sections
@@ -19,7 +21,12 @@ const ZONES_PERMISSION_SECTION = "Zones";
 const STATS_PERMISSION_SECTION = "Dashboard";
 const CLUSTER_PERMISSION_SECTION = "Administration";
 
-function defaultHttpClient(target: TargetConfig, config: AppConfig, clock: Clock): HttpClient {
+function defaultHttpClient(
+  target: TargetConfig,
+  config: AppConfig,
+  clock: Clock,
+  onUpstreamAttempt: OnUpstreamAttempt,
+): HttpClient {
   const dispatcher = createAgent({
     caBundlePath: target.caBundlePath,
     tlsInsecureSkipVerify: target.tlsInsecureSkipVerify,
@@ -30,6 +37,7 @@ function defaultHttpClient(target: TargetConfig, config: AppConfig, clock: Clock
     dispatcher,
     clock,
     budgetMs: config.requestTimeoutSeconds * 1000,
+    onUpstreamAttempt,
   });
 }
 
@@ -84,6 +92,17 @@ export interface TargetCollectors {
 export interface TargetCycleResult {
   readonly summary: CycleSummary;
   readonly hadParseError: boolean;
+  // One entry per real failed attempt this cycle (session always; native/
+  // zones whenever attempted; stats/cluster only when `fresh`, the same
+  // gating hadParseError already applies to those two) — self-metrics.ts's
+  // technitium_exporter_poll_errors_total{reason} increments once per entry.
+  readonly pollErrorReasons: readonly PollErrorReason[];
+  // Which collector groups had a fresh parse failure this cycle, for
+  // technitium_exporter_parse_errors_total{group} — a superset-free subset of
+  // pollErrorReasons: every group here also contributed a "parse" entry
+  // above, but pollErrorReasons doesn't say which collector a given reason
+  // came from.
+  readonly parseErrorGroups: readonly string[];
 }
 
 // The one thing every poll cycle actually does, kept independent of
@@ -105,7 +124,13 @@ export async function runTargetCycle(collectors: TargetCollectors): Promise<Targ
   let zoneOutcome: CycleSummary["zones"] = "skipped";
   let statsOutcome: CycleSummary["stats"] = "skipped";
   let clusterOutcome: CycleSummary["cluster"] = "skipped";
-  let hadParseError = sessionResult.kind === "failure" && sessionResult.reason === "parse";
+  const pollErrorReasons: PollErrorReason[] = [];
+  const parseErrorGroups: string[] = [];
+
+  if (sessionResult.kind === "failure") {
+    pollErrorReasons.push(sessionResult.reason);
+    if (sessionResult.reason === "parse") parseErrorGroups.push("session");
+  }
 
   if (sessionResult.kind === "success") {
     const { permissions } = sessionResult.info;
@@ -115,7 +140,10 @@ export async function runTargetCycle(collectors: TargetCollectors): Promise<Targ
       tasks.push(
         native.collect().then((result) => {
           nativeOutcome = result.kind;
-          if (result.kind === "failure" && result.reason === "parse") hadParseError = true;
+          if (result.kind === "failure") {
+            pollErrorReasons.push(result.reason);
+            if (result.reason === "parse") parseErrorGroups.push("native");
+          }
         }),
       );
     }
@@ -124,7 +152,10 @@ export async function runTargetCycle(collectors: TargetCollectors): Promise<Targ
       tasks.push(
         zones.collect().then((result) => {
           zoneOutcome = result.kind;
-          if (result.kind === "failure" && result.reason === "parse") hadParseError = true;
+          if (result.kind === "failure") {
+            pollErrorReasons.push(result.reason);
+            if (result.reason === "parse") parseErrorGroups.push("zones");
+          }
         }),
       );
     }
@@ -133,13 +164,14 @@ export async function runTargetCycle(collectors: TargetCollectors): Promise<Targ
       tasks.push(
         stats.collect().then((result) => {
           statsOutcome = result.kind;
-          // Only a fresh attempt's own parse failure counts once — an
-          // off-cadence cycle just restates the last real attempt's outcome
-          // and must not re-trigger hadParseError on every such cycle until
-          // the next actual fetch (D§5.7), the same reason cluster's own
-          // handling below checks result.fresh.
-          if (result.fresh && result.kind === "failure" && result.reason === "parse") {
-            hadParseError = true;
+          // Only a fresh attempt's own outcome counts — an off-cadence cycle
+          // just restates the last real attempt's outcome and must not
+          // re-count it on every such cycle until the next actual fetch
+          // (D§5.7), the same reason cluster's own handling below checks
+          // result.fresh.
+          if (result.fresh && result.kind === "failure") {
+            pollErrorReasons.push(result.reason);
+            if (result.reason === "parse") parseErrorGroups.push("stats");
           }
         }),
       );
@@ -153,12 +185,13 @@ export async function runTargetCycle(collectors: TargetCollectors): Promise<Targ
         tasks.push(
           cluster.collect().then((result) => {
             clusterOutcome = result.kind;
-            // Only a fresh attempt's own parse failure counts once — an
-            // off-cadence cycle just restates the last real attempt's
-            // outcome and must not re-trigger hadParseError on every such
-            // cycle until the next actual fetch (D§5.7).
-            if (result.fresh && result.kind === "failure" && result.reason === "parse") {
-              hadParseError = true;
+            // Only a fresh attempt's own outcome counts — an off-cadence
+            // cycle just restates the last real attempt's outcome and must
+            // not re-count it on every such cycle until the next actual
+            // fetch (D§5.7).
+            if (result.fresh && result.kind === "failure") {
+              pollErrorReasons.push(result.reason);
+              if (result.reason === "parse") parseErrorGroups.push("cluster");
             }
           }),
         );
@@ -195,7 +228,9 @@ export async function runTargetCycle(collectors: TargetCollectors): Promise<Targ
       stats: statsOutcome,
       cluster: clusterOutcome,
     },
-    hadParseError,
+    hadParseError: parseErrorGroups.length > 0,
+    pollErrorReasons,
+    parseErrorGroups,
   };
 }
 
@@ -216,8 +251,14 @@ export interface TargetRegistryOptions {
   readonly warn: (targetName: string, message: string) => void;
   // Overridable so tests can inject a fake HttpClient (per the pattern every
   // collector already supports) instead of standing up a real Technitium
-  // server or a mock HTTP listener.
-  readonly createHttpClient?: (target: TargetConfig) => Pick<HttpClient, "get">;
+  // server or a mock HTTP listener. onUpstreamAttempt is passed through so a
+  // test-supplied client can still be wired into that target's own
+  // self-metrics if it wants to (most tests ignore the second parameter,
+  // which TypeScript allows a function value to do).
+  readonly createHttpClient?: (
+    target: TargetConfig,
+    onUpstreamAttempt: OnUpstreamAttempt,
+  ) => Pick<HttpClient, "get">;
 }
 
 // Holds one Registry + HttpClient + collector set + TargetPoller per
@@ -229,7 +270,9 @@ export class TargetRegistry {
 
   constructor(config: AppConfig, options: TargetRegistryOptions) {
     const createHttpClient =
-      options.createHttpClient ?? ((target) => defaultHttpClient(target, config, options.clock));
+      options.createHttpClient ??
+      ((target, onUpstreamAttempt) =>
+        defaultHttpClient(target, config, options.clock, onUpstreamAttempt));
 
     const entries = new Map<string, TargetEntry>();
     for (const target of config.targets) {
@@ -267,10 +310,21 @@ function buildEntry(
   target: TargetConfig,
   config: AppConfig,
   options: TargetRegistryOptions,
-  createHttpClient: (target: TargetConfig) => Pick<HttpClient, "get">,
+  createHttpClient: (
+    target: TargetConfig,
+    onUpstreamAttempt: OnUpstreamAttempt,
+  ) => Pick<HttpClient, "get">,
 ): TargetEntry {
   const registry = new Registry();
-  const httpClient = createHttpClient(target);
+  const pollTracker = new PollCycleTracker<CycleSummary>();
+  const selfMetrics = new SelfMetrics(registry, {
+    clock: options.clock,
+    tlsInsecureSkipVerify: target.tlsInsecureSkipVerify,
+    pollTracker,
+  });
+  const httpClient = createHttpClient(target, (outcome) =>
+    selfMetrics.recordUpstreamAttempt(outcome),
+  );
 
   const enabledCollectors: string[] = ["native", "zones"];
   if (config.enableStatsCollector) enabledCollectors.push("stats");
@@ -317,10 +371,9 @@ function buildEntry(
       })
     : undefined;
 
-  const pollTracker = new PollCycleTracker<CycleSummary>();
-
   const runCycle = async (): Promise<void> => {
-    const { summary, hadParseError } = await runTargetCycle({
+    const startedAtElapsedMs = options.clock.elapsed();
+    const { summary, hadParseError, pollErrorReasons, parseErrorGroups } = await runTargetCycle({
       session,
       native,
       zones,
@@ -329,8 +382,23 @@ function buildEntry(
     });
     // Monotonic, per IMPLEMENTATION.md's "Shared primitives": clock.now()
     // (Date.now()) would step backwards or jump under an NTP correction,
-    // fabricating a negative or bogus cache age once Phase 10 exposes this.
-    pollTracker.record(summary, options.clock.elapsed(), hadParseError);
+    // fabricating a negative or bogus cache age.
+    const finishedAtElapsedMs = options.clock.elapsed();
+
+    pollTracker.record(summary, finishedAtElapsedMs, hadParseError);
+
+    selfMetrics.recordPollCycle(
+      summary.session === "success" ? "success" : "failure",
+      finishedAtElapsedMs - startedAtElapsedMs,
+    );
+    for (const reason of pollErrorReasons) selfMetrics.recordPollError(reason);
+    for (const group of parseErrorGroups) selfMetrics.recordParseError(group);
+    // Unconditional, the same way pollTracker.record() above is: what's
+    // cached is whatever this cycle produced, whether or not it succeeded.
+    // Must run after pollTracker.record() above — noteCacheFetch() only
+    // arms cache_age_seconds's presence; the fetchedAt value it reports is
+    // read directly from pollTracker.lastEntry at collect time.
+    selfMetrics.noteCacheFetch();
   };
 
   const poller = new TargetPoller({

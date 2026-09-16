@@ -51,6 +51,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Cluster configuration collector (`src/api/cluster.ts`, `src/metrics/cluster-metrics.ts`, `src/metrics/cluster-collector.ts`): opt-in, `Administration: View` permission-gated collector that parses `GET /api/admin/cluster/state` and exports four gauge metrics (`technitium_cluster_heartbeat_refresh_interval_seconds`, `technitium_cluster_heartbeat_retry_interval_seconds`, `technitium_cluster_config_refresh_interval_seconds`, `technitium_cluster_config_last_synced_timestamp_seconds`) with a slower independent cadence (60s default). Only polls when target is clustered and permission is granted; clears series + `collector_success` child when target stops being clustered so standalone nodes never show stale cluster readings.
 - `refreshIfDue()` return type changed to `Promise<boolean>` to indicate whether a fetch was actually attempted this call, enabling callers to distinguish between a failed fetch and no-fetch-due
 
+- Self-observability collector (`src/poller/self-metrics.ts`): `technitium_series_cardinality_tripwire_total` counter incremented each time the exporter approaches the per-target series limit to detect O(N²) bugs early and aid in capacity planning.
+- Diagnostic dump mode (`src/dump-raw.ts`, `--dump-raw` CLI flag): outputs all collected API responses and metrics state as sanitised JSON to stdout with all logging diverted to stderr, with hard redaction of the session token and `stackTrace` fields (DESIGN.md §3.2.11). A test proves no token can leak.
+- Metrics reference generator (`scripts/generate-metrics-doc.ts`): produces `docs/METRICS.md` listing every metric name, type, labels, and per-phase availability; a drift test ensures generated doc stays in sync with actual collectors.
+
 ### Fixed
 
 - `SessionCollector` permission-transition logic now removes stale `technitium_collector_success` set-to-0 only once on permission restore, avoiding race with concurrent writes from native collector

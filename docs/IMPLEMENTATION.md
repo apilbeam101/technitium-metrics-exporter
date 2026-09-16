@@ -47,7 +47,7 @@ src/
   domain/
     target.ts  snapshot.ts  session.ts  zone.ts  stats.ts  cluster.ts
   metrics/
-    registry.ts  state-set.ts  absent-gauge.ts  self.ts
+    registry.ts  state-set.ts  absent-gauge.ts
     session-metrics.ts   session-collector.ts
     native-metrics.ts    native-collector.ts
     zone-metrics.ts      zone-collector.ts
@@ -104,9 +104,9 @@ attempt receives an `AbortSignal.timeout` sized to the *remaining* budget, and
 time spent in retry backoff is measured on the monotonic clock and deducted, so
 a call cannot exceed its budget by accumulating retries.
 
-Never follows redirects and never reads `Location`. Exposes an
-`onRawResponse(statusCode, body)` hook, which is what `--dump-raw` subscribes
-to.
+Never follows redirects and never reads `Location`. `get()`'s own return value
+(`{ statusCode, body }`) is what `--dump-raw` reads directly, one endpoint at a
+time — there is no separate raw-response hook.
 
 ### `http/path-allowlist.ts`
 

@@ -45,8 +45,7 @@ will land in `docs/INSTALL_*.md` as those phases are built (see
 
 - [docs/DESIGN.md](docs/DESIGN.md) — what the exporter exposes and why
 - [docs/IMPLEMENTATION.md](docs/IMPLEMENTATION.md) — how it's being built
-- `docs/METRICS.md` — generated metric reference (not yet generated; see
-  [docs/IMPLEMENTATION.md](docs/IMPLEMENTATION.md) Phase 10)
+- [docs/METRICS.md](docs/METRICS.md) — generated metric reference
 - [SECURITY.md](SECURITY.md) — vulnerability reporting and the least-privilege
   token setup
 - [CONTRIBUTING.md](CONTRIBUTING.md) — how to contribute

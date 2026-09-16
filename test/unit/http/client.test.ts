@@ -3,7 +3,7 @@ import { createServer } from "node:http";
 import { afterEach, describe, it } from "node:test";
 import { Agent, MockAgent } from "undici";
 import { Secret } from "../../../src/config/secret.ts";
-import { HttpClient, type RawResponse } from "../../../src/http/client.ts";
+import { HttpClient } from "../../../src/http/client.ts";
 import { systemClock } from "../../../src/http/clock.ts";
 import { TechnitiumHttpError } from "../../../src/http/errors.ts";
 import { FakeClock } from "../../support/fake-clock.ts";
@@ -28,7 +28,6 @@ function client(
   overrides: {
     baseUrl?: string;
     budgetMs?: number;
-    onRawResponse?: (r: RawResponse) => void;
     clock?: typeof systemClock;
   } = {},
 ) {
@@ -39,7 +38,6 @@ function client(
     dispatcher: mockAgent,
     clock: overrides.clock ?? (overrides.budgetMs === undefined ? systemClock : new FakeClock()),
     budgetMs: overrides.budgetMs ?? 15000,
-    ...(overrides.onRawResponse === undefined ? {} : { onRawResponse: overrides.onRawResponse }),
   });
 }
 
@@ -101,29 +99,77 @@ describe("HttpClient.get", () => {
     assert.equal(response.statusCode, 302);
   });
 
-  it("invokes onRawResponse for every attempt, including ones that end up retried", async () => {
+  it("invokes onUpstreamAttempt for every attempt, with a real status code on a response and a bounded reason on a network/timeout failure", async () => {
     const mockAgent = makeMockAgent();
     mockAgent
       .get(BASE_URL)
       .intercept({ path: "/api/user/session/get", method: "GET" })
-      .reply(503, "unavailable-1")
+      .replyWithError(new Error("connection refused"))
       .times(1);
     mockAgent
       .get(BASE_URL)
       .intercept({ path: "/api/user/session/get", method: "GET" })
-      .reply(200, "ok-2")
+      .reply(200, "ok")
       .times(1);
 
-    const seen: RawResponse[] = [];
-    const response = await client(mockAgent, {
+    const seen: Array<{ path: string; statusCode?: number; reason?: string }> = [];
+    activeMockAgent = mockAgent;
+    const response = await new HttpClient({
+      baseUrl: BASE_URL,
+      apiToken: new Secret("test-token"),
+      dispatcher: mockAgent,
+      clock: new FakeClock(),
       budgetMs: 5000,
-      onRawResponse: (r) => seen.push(r),
+      onUpstreamAttempt: (outcome) => {
+        seen.push(
+          "statusCode" in outcome
+            ? { path: outcome.path, statusCode: outcome.statusCode }
+            : { path: outcome.path, reason: outcome.reason },
+        );
+      },
     }).get("/api/user/session/get");
 
     assert.equal(response.statusCode, 200);
     assert.deepEqual(seen, [
-      { statusCode: 503, body: "unavailable-1" },
-      { statusCode: 200, body: "ok-2" },
+      { path: "/api/user/session/get", reason: "network" },
+      { path: "/api/user/session/get", statusCode: 200 },
+    ]);
+  });
+
+  it("invokes onUpstreamAttempt with the real status code of a 5xx attempt that is then discarded as a failure", async () => {
+    const mockAgent = makeMockAgent();
+    mockAgent
+      .get(BASE_URL)
+      .intercept({ path: "/api/user/session/get", method: "GET" })
+      .reply(503, "service unavailable")
+      .times(1);
+    mockAgent
+      .get(BASE_URL)
+      .intercept({ path: "/api/user/session/get", method: "GET" })
+      .reply(200, "ok")
+      .times(1);
+
+    const seen: Array<{ path: string; statusCode?: number; reason?: string }> = [];
+    activeMockAgent = mockAgent;
+    const response = await new HttpClient({
+      baseUrl: BASE_URL,
+      apiToken: new Secret("test-token"),
+      dispatcher: mockAgent,
+      clock: new FakeClock(),
+      budgetMs: 5000,
+      onUpstreamAttempt: (outcome) => {
+        seen.push(
+          "statusCode" in outcome
+            ? { path: outcome.path, statusCode: outcome.statusCode }
+            : { path: outcome.path, reason: outcome.reason },
+        );
+      },
+    }).get("/api/user/session/get");
+
+    assert.equal(response.statusCode, 200);
+    assert.deepEqual(seen, [
+      { path: "/api/user/session/get", statusCode: 503 },
+      { path: "/api/user/session/get", statusCode: 200 },
     ]);
   });
 

@@ -10,6 +10,12 @@ export interface Logger {
 export interface LoggerOptions {
   readonly level: LogLevel;
   readonly format: LogFormat;
+  // --dump-raw reserves stdout for the sanitised JSON dump itself (Phase 10),
+  // so every log line — including the debug/info half of the ordinary split
+  // below — must go to stderr instead for that one entry point. Additive and
+  // defaulted to false, so every existing caller and test keeps the ordinary
+  // split unless it opts in.
+  readonly allLogsToStderr?: boolean;
 }
 
 const LEVEL_ORDER: Readonly<Record<LogLevel, number>> = {
@@ -49,8 +55,11 @@ export function createLogger(options: LoggerOptions): Logger {
   function write(level: LogLevel, message: string, fields?: Record<string, unknown>): void {
     if (LEVEL_ORDER[level] < threshold) return;
     const line = `${formatLine(options.format, level, message, fields)}\n`;
-    if (level === "warn" || level === "error") process.stderr.write(line);
-    else process.stdout.write(line);
+    if (options.allLogsToStderr === true || level === "warn" || level === "error") {
+      process.stderr.write(line);
+    } else {
+      process.stdout.write(line);
+    }
   }
 
   return {

@@ -6,8 +6,9 @@ This document describes what the exporter is, what it exposes, and why each
 decision was made. It is the reference for reviewers and for anyone deciding
 whether the exporter fits their deployment. For how it gets built, see
 [IMPLEMENTATION.md](IMPLEMENTATION.md). A generated metric reference,
-`METRICS.md`, will exist from the phase that adds it (see
-[IMPLEMENTATION.md](IMPLEMENTATION.md) Phase 10) — it is not yet present.
+[`METRICS.md`](METRICS.md), is produced from the live metric declarations by
+`scripts/generate-metrics-doc.ts` (see [IMPLEMENTATION.md](IMPLEMENTATION.md)
+Phase 10), with a test asserting it stays in sync with the code.
 
 ---
 
@@ -333,8 +334,8 @@ allocation ([§9](#9-open-questions)).
 ## 5. Metric surface
 
 Prefix `technitium_` for DNS-server data, `technitium_exporter_` for the
-exporter's own health. Once built, `METRICS.md` will be generated from the
-live metric declarations, with a test asserting the committed file matches a
+exporter's own health. [`METRICS.md`](METRICS.md) is generated from the live
+metric declarations, with a test asserting the committed file matches a
 fresh generation, so the reference cannot drift from the code.
 
 ### 5.1 Per-node health
@@ -553,6 +554,10 @@ Per target: `technitium_exporter_last_successful_poll_timestamp_seconds`,
 `_upstream_request_duration_seconds{endpoint}`, `_parse_errors_total{group}`,
 `_unknown_enum_total{metric,value}`, `_series` (the cardinality tripwire, N7),
 `_tls_verification_disabled`.
+
+`status_code` is the numeric HTTP status when the attempt received a
+response, or one of the literal strings `timeout`/`network` for an attempt
+that never got one.
 
 Global: `technitium_exporter_build_info{version,commit,node_version}`,
 `technitium_exporter_targets`, and Node.js runtime metrics.

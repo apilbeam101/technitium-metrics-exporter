@@ -32,6 +32,17 @@ describe("handleCliFlags", () => {
 
     assert.equal(handled, true);
     assert.match(written, /Usage: technitium-metrics-exporter/);
+    assert.match(written, /--dump-raw/);
+  });
+
+  it("does not handle --dump-raw itself — it belongs to index.ts's main(), since it needs the fully loaded config", () => {
+    let written = "";
+    const handled = handleCliFlags(["--dump-raw"], (text) => {
+      written += text;
+    });
+
+    assert.equal(handled, false);
+    assert.equal(written, "");
   });
 
   it("does not handle unrelated arguments", () => {

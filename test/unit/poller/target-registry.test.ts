@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import { Secret } from "../../../src/config/secret.ts";
 import type { AppConfig, TargetConfig } from "../../../src/config/types.ts";
-import { TechnitiumHttpError } from "../../../src/http/errors.ts";
+import { type PollErrorReason, TechnitiumHttpError } from "../../../src/http/errors.ts";
 import type { TargetEntry } from "../../../src/poller/target-registry.ts";
 import { runTargetCycle, TargetRegistry } from "../../../src/poller/target-registry.ts";
 import { FakeClock } from "../../support/fake-clock.ts";
@@ -616,6 +616,108 @@ describe("TargetRegistry", () => {
     assert.notEqual(entry.pollTracker.lastEntry?.fetchedAt, clock.now());
   });
 
+  it("sets technitium_exporter_tls_verification_disabled from the target's own config at construction time", async () => {
+    const insecureTarget = { ...target("dns-a"), tlsInsecureSkipVerify: true };
+    const registry = new TargetRegistry(baseConfig([insecureTarget, target("dns-b")]), {
+      clock: new FakeClock(),
+      warn: () => {},
+      createHttpClient: () => routedClient({}),
+    });
+
+    assert.equal(
+      await metricValue(
+        mustGet(registry, "dns-a").registry,
+        "technitium_exporter_tls_verification_disabled",
+      ),
+      1,
+    );
+    assert.equal(
+      await metricValue(
+        mustGet(registry, "dns-b").registry,
+        "technitium_exporter_tls_verification_disabled",
+      ),
+      0,
+    );
+  });
+
+  it("increments technitium_exporter_poll_total once per cycle and records the failure reason on a rejected token", async () => {
+    const registry = new TargetRegistry(baseConfig([target("dns-a")]), {
+      clock: new FakeClock(),
+      warn: () => {},
+      createHttpClient: () => routedClient({ "/api/user/session/get": INVALID_TOKEN }),
+    });
+
+    const entry = mustGet(registry, "dns-a");
+    await entry.runCycle();
+    await entry.runCycle();
+
+    assert.equal(await metricValue(entry.registry, "technitium_exporter_poll_total"), 2);
+    const metrics = (await entry.registry.getMetricsAsJSON()) as Array<{
+      name: string;
+      values: Array<{ value: number; labels: Record<string, string> }>;
+    }>;
+    const errors =
+      metrics.find((m) => m.name === "technitium_exporter_poll_errors_total")?.values ?? [];
+    assert.equal(errors.find((v) => v.labels.reason === "auth")?.value, 2);
+  });
+
+  it("sets technitium_exporter_last_successful_poll_timestamp_seconds only once a cycle actually succeeds", async () => {
+    const clock = new FakeClock(1_700_000_000_000);
+    const registry = new TargetRegistry(baseConfig([target("dns-a")]), {
+      clock,
+      warn: () => {},
+      createHttpClient: () =>
+        routedClient({
+          "/api/user/session/get": SESSION_V15_CLUSTERED,
+          "/api/dashboard/metrics/text": NATIVE_CURRENT,
+          "/api/zones/list": ZONES_LIST,
+        }),
+    });
+
+    const entry = mustGet(registry, "dns-a");
+    await entry.runCycle();
+
+    assert.equal(
+      await metricValue(
+        entry.registry,
+        "technitium_exporter_last_successful_poll_timestamp_seconds",
+      ),
+      clock.now() / 1000,
+    );
+  });
+
+  it("wires each target's own HttpClient upstream telemetry into that target's own self-metrics", async () => {
+    const registry = new TargetRegistry(baseConfig([target("dns-a")]), {
+      clock: new FakeClock(),
+      warn: () => {},
+      createHttpClient: (_t, onUpstreamAttempt) => {
+        const inner = routedClient({ "/api/user/session/get": INVALID_TOKEN });
+        return {
+          get: async (path: string) => {
+            const response = await inner.get(path);
+            onUpstreamAttempt({ path, durationMs: 12, statusCode: response.statusCode });
+            return response;
+          },
+        };
+      },
+    });
+
+    const entry = mustGet(registry, "dns-a");
+    await entry.runCycle();
+
+    const metrics = (await entry.registry.getMetricsAsJSON()) as Array<{
+      name: string;
+      values: Array<{ value: number; labels: Record<string, string> }>;
+    }>;
+    const requests =
+      metrics.find((m) => m.name === "technitium_exporter_upstream_requests_total")?.values ?? [];
+    assert.ok(
+      requests.some(
+        (v) => v.labels.endpoint === "/api/user/session/get" && v.labels.status_code === "200",
+      ),
+    );
+  });
+
   it("startAll() actually drives real pollers, and stopAll() actually halts them", async () => {
     const clock = new FakeClock();
     let sessionCalls = 0;
@@ -696,7 +798,7 @@ describe("runTargetCycle", () => {
   }
 
   function fakeSession(
-    result: ReturnType<typeof fakeSuccess> | { kind: "failure"; reason: "network" },
+    result: ReturnType<typeof fakeSuccess> | { kind: "failure"; reason: PollErrorReason },
   ) {
     const labelCalls: Array<{ collector: string }> = [];
     return {
@@ -774,5 +876,55 @@ describe("runTargetCycle", () => {
 
     assert.equal(result.hadParseError, true);
     assert.equal(result.summary.native, "failure");
+    assert.deepEqual(result.pollErrorReasons, ["parse"]);
+    assert.deepEqual(result.parseErrorGroups, ["native"]);
+  });
+
+  it("collects a poll error reason for every failed collector this cycle, not just parse failures", async () => {
+    const session = fakeSession(
+      fakeSuccess({ Dashboard: { canView: true }, Zones: { canView: true } }),
+    );
+
+    const result = await runTargetCycle({
+      session,
+      native: { collect: async () => ({ kind: "failure" as const, reason: "http_5xx" as const }) },
+      zones: { collect: async () => ({ kind: "failure" as const, reason: "network" as const }) },
+    });
+
+    assert.equal(result.hadParseError, false);
+    assert.deepEqual([...result.pollErrorReasons].sort(), ["http_5xx", "network"]);
+    assert.deepEqual(result.parseErrorGroups, []);
+  });
+
+  it("records the session's own failure reason, tagged with the session group when it's a parse failure", async () => {
+    const session = fakeSession({ kind: "failure", reason: "parse" });
+
+    const result = await runTargetCycle({
+      session,
+      native: { collect: async () => ({ kind: "success" as const }) },
+      zones: { collect: async () => ({ kind: "success" as const }) },
+    });
+
+    assert.deepEqual(result.pollErrorReasons, ["parse"]);
+    assert.deepEqual(result.parseErrorGroups, ["session"]);
+  });
+
+  it("does not count a stats/cluster failure that merely restates a prior off-cadence outcome (fresh: false)", async () => {
+    const session = fakeSession(
+      fakeSuccess({ Dashboard: { canView: true }, Zones: { canView: true } }),
+    );
+
+    const result = await runTargetCycle({
+      session,
+      native: { collect: async () => ({ kind: "success" as const }) },
+      zones: { collect: async () => ({ kind: "success" as const }) },
+      stats: {
+        collect: async () => ({ kind: "failure" as const, reason: "parse" as const, fresh: false }),
+      },
+    });
+
+    assert.equal(result.hadParseError, false);
+    assert.deepEqual(result.pollErrorReasons, []);
+    assert.deepEqual(result.parseErrorGroups, []);
   });
 });

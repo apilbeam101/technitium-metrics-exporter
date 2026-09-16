@@ -14,17 +14,46 @@ export class AbsentUntilSetGauge {
   readonly #registry: Registry;
   readonly #name: string;
   readonly #help: string;
+  // Only self-metrics.ts's own cache_age_seconds uses this — every other
+  // caller wants an ordinary externally-.set() gauge. When present, the
+  // underlying Gauge is built with this as its own collect() (see
+  // #ensureGauge below for why the closure can reference `this.#gauge`
+  // despite being constructed before that assignment completes).
+  readonly #computeValue: (() => number) | undefined;
   #gauge: Gauge | undefined;
 
-  constructor(registry: Registry, name: string, help: string) {
+  constructor(registry: Registry, name: string, help: string, computeValue?: () => number) {
     this.#registry = registry;
     this.#name = name;
     this.#help = help;
+    this.#computeValue = computeValue;
+  }
+
+  #ensureGauge(): Gauge {
+    // computeValue's own collect() runs only at render time, by which point
+    // this assignment has long since completed — the same "reference this
+    // metric's own field from inside its own collect()" pattern
+    // self-metrics.ts's _series gauge already relies on.
+    this.#gauge ??= new Gauge({
+      name: this.#name,
+      help: this.#help,
+      registers: [this.#registry],
+      ...(this.#computeValue === undefined
+        ? {}
+        : { collect: () => this.#gauge?.set(this.#computeValue?.() ?? 0) }),
+    });
+    return this.#gauge;
   }
 
   set(value: number): void {
-    this.#gauge ??= new Gauge({ name: this.#name, help: this.#help, registers: [this.#registry] });
-    this.#gauge.set(value);
+    this.#ensureGauge().set(value);
+  }
+
+  // Makes the underlying Gauge present without writing a value directly —
+  // for a computeValue-driven gauge, where the value is always recomputed by
+  // collect() at render time and never written from outside.
+  ensurePresent(): void {
+    this.#ensureGauge();
   }
 
   setOrClear(value: number | undefined): void {

@@ -18,6 +18,7 @@ import { loadEnv } from "./config/load.ts";
 import { redactSummary } from "./config/redact-summary.ts";
 import type { AppConfig } from "./config/types.ts";
 import { ConfigError, validate } from "./config/validate.ts";
+import { runDumpRaw } from "./dump-raw.ts";
 import { systemClock } from "./http/clock.ts";
 import { installShutdownHandlers } from "./lifecycle.ts";
 import { createLogger } from "./log/logger.ts";
@@ -97,6 +98,23 @@ async function main(): Promise<void> {
       return;
     }
     throw error;
+  }
+
+  // --dump-raw needs the fully loaded/validated AppConfig (targets, tokens,
+  // CA bundles) to do anything, unlike --version/--help, so it's checked
+  // here rather than in cli.ts's handleCliFlags — and it never starts the
+  // server or poller at all, unlike every other startup path below.
+  // allLogsToStderr reserves stdout for the sanitised dump itself.
+  if (process.argv.includes("--dump-raw")) {
+    const logger = createLogger({
+      level: config.logLevel,
+      format: config.logFormat,
+      allLogsToStderr: true,
+    });
+    for (const warning of warnings) logger.warn(warning);
+    logger.info("configuration loaded", redactSummary(config));
+    await runDumpRaw(config, { clock: systemClock }, (text) => process.stdout.write(text));
+    return;
   }
 
   const logger = createLogger({ level: config.logLevel, format: config.logFormat });
