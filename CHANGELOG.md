@@ -48,6 +48,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Structured logging (`src/log/logger.ts`) with level-aware output and correlation ID support
 - Integration tests (`test/integration/`) covering multi-target polling, per-target registry rendering, endpoint authentication, TLS handshake, graceful shutdown sequence
 
+- Cluster configuration collector (`src/api/cluster.ts`, `src/metrics/cluster-metrics.ts`, `src/metrics/cluster-collector.ts`): opt-in, `Administration: View` permission-gated collector that parses `GET /api/admin/cluster/state` and exports four gauge metrics (`technitium_cluster_heartbeat_refresh_interval_seconds`, `technitium_cluster_heartbeat_retry_interval_seconds`, `technitium_cluster_config_refresh_interval_seconds`, `technitium_cluster_config_last_synced_timestamp_seconds`) with a slower independent cadence (60s default). Only polls when target is clustered and permission is granted; clears series + `collector_success` child when target stops being clustered so standalone nodes never show stale cluster readings.
+- `refreshIfDue()` return type changed to `Promise<boolean>` to indicate whether a fetch was actually attempted this call, enabling callers to distinguish between a failed fetch and no-fetch-due
+
 ### Fixed
 
 - `SessionCollector` permission-transition logic now removes stale `technitium_collector_success` set-to-0 only once on permission restore, avoiding race with concurrent writes from native collector

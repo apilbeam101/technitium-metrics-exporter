@@ -16,7 +16,7 @@ describe("createRefreshCache", () => {
     assert.equal(cache.getCached(), "initial");
   });
 
-  it("refreshes on the first call regardless of interval", async () => {
+  it("refreshes on the first call regardless of interval, and resolves to true", async () => {
     const clock = new FakeClock();
     let calls = 0;
     const cache = createRefreshCache({
@@ -29,12 +29,13 @@ describe("createRefreshCache", () => {
       initialValue: "initial",
     });
 
-    await cache.refreshIfDue();
+    const fresh = await cache.refreshIfDue();
+    assert.equal(fresh, true);
     assert.equal(calls, 1);
     assert.equal(cache.getCached(), "fetched");
   });
 
-  it("does not refresh again before the interval has elapsed", async () => {
+  it("does not refresh again before the interval has elapsed, and resolves to false", async () => {
     const clock = new FakeClock();
     let calls = 0;
     const cache = createRefreshCache({
@@ -49,13 +50,14 @@ describe("createRefreshCache", () => {
 
     await cache.refreshIfDue();
     clock.advance(500);
-    await cache.refreshIfDue();
+    const fresh = await cache.refreshIfDue();
 
+    assert.equal(fresh, false);
     assert.equal(calls, 1);
     assert.equal(cache.getCached(), "fetch-1");
   });
 
-  it("refreshes again once the interval has elapsed", async () => {
+  it("refreshes again once the interval has elapsed, and resolves to true", async () => {
     const clock = new FakeClock();
     let calls = 0;
     const cache = createRefreshCache({
@@ -70,13 +72,14 @@ describe("createRefreshCache", () => {
 
     await cache.refreshIfDue();
     clock.advance(1000);
-    await cache.refreshIfDue();
+    const fresh = await cache.refreshIfDue();
 
+    assert.equal(fresh, true);
     assert.equal(calls, 2);
     assert.equal(cache.getCached(), "fetch-2");
   });
 
-  it("retains the previous value and does not throw when a refresh fails", async () => {
+  it("retains the previous value and does not throw when a refresh fails, but still resolves to true since a fetch was attempted", async () => {
     const clock = new FakeClock();
     let failures = 0;
     const cache = createRefreshCache({
@@ -91,7 +94,8 @@ describe("createRefreshCache", () => {
       },
     });
 
-    await assert.doesNotReject(cache.refreshIfDue());
+    const fresh = await cache.refreshIfDue();
+    assert.equal(fresh, true);
     assert.equal(cache.getCached(), "initial");
     assert.equal(failures, 1);
   });

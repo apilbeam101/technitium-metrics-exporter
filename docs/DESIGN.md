@@ -497,6 +497,48 @@ behaviour for a peer that has never connected is unconfirmed. Both an absent
 key and a never-sentinel resolve to the same absent series, so either
 behaviour renders correctly without a code change once confirmed.
 
+`admin/cluster/state`'s own response also carries a `nodes[]` array whose
+`lastSeen` field is the one §3.2.10's sentinel is documented against, and a
+live capture confirms it does carry that sentinel. This design has no metric
+for it: exporting it would duplicate the peer identity/state that
+`technitium_cluster_node_state` already sources from `session/get`, plus the
+network address and URL fields §4.2 excludes. `nodes[]` is present in the
+response and deliberately not exported.
+`technitium_cluster_config_last_synced_timestamp_seconds`'s own
+`configLastSynced` field reuses the same shared timestamp parser
+defensively — any .NET timestamp field could in principle carry the
+sentinel — but no live capture has yet confirmed this specific field ever
+does (see [§9](#9-open-questions)).
+
+The four `admin/cluster/state`-sourced metrics above are only fetched, on
+their own cadence, while the target both has clustering initialised and the
+token holds `Administration: View`. The two cases where that isn't true are
+handled differently, deliberately:
+
+- **The target isn't clustered.** All four series, and
+  `technitium_collector_success{collector="cluster"}`'s own "cluster" child,
+  are cleared to genuinely absent rather than either calling the endpoint
+  forever or freezing at whatever they last reported while clustered — the
+  same "no cluster claims to make" reasoning `applyClusterPeers(metrics,
+  undefined)` uses for the three `session/get`-sourced metrics above when a
+  target loses clustering.
+- **The target is clustered but the token lacks `Administration: View`.**
+  The endpoint is never called, and `technitium_collector_success{collector=
+  "cluster"}` reads 0 with one warning — the same generic permission-gating
+  every other opt-in collector gets ([§6.4](#64-least-privilege-token)).
+
+On a transient poll failure once fetching has started (the target is
+clustered and the grant holds, but the call itself fails), all four freeze at
+their last known value rather than going absent — correct for the three
+interval gauges, since they're static configuration, and useful for the sync
+timestamp specifically, since a `time() - <metric>` alert keeps aging
+correctly on a frozen value rather than going silent. The gap this leaves:
+revoking `Administration: View` on a running token falls into the second case
+above, so these four series sit at their last value indefinitely with no
+in-band signal of staleness beyond `technitium_collector_success{collector=
+"cluster"}` dropping to 0 — any alert built on these four metrics must join on
+that gauge being 1.
+
 Peer network addresses and connection URLs arrive in the same `session/get`
 peer inventory that supplies `type` and `state`, unrequested and regardless of
 whether the configuration-detail collector is enabled ([§4.2](#42-scope)).
@@ -698,6 +740,12 @@ CRD and applying that manifest there fails.
    fraction of each zone's own SOA `expire`, which `/api/zones/list` does not
    report; reading it would need a records call and a wider grant. The shipped
    rule uses a documented absolute default with tuning instructions.
+4. **Whether `admin/cluster/state`'s `configLastSynced` can ever carry
+   §3.2.10's never-sentinel.** A live capture confirms that endpoint's
+   `nodes[].lastSeen` does; `configLastSynced` is parsed by the same shared
+   function defensively, but no capture has shown it doing so. Confirm during
+   Phase 14 live validation and update [§5.6](#56-cluster) once known either
+   way.
 
 ---
 

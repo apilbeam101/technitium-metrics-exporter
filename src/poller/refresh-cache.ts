@@ -9,7 +9,12 @@ export interface RefreshCacheOptions<T> {
 }
 
 export interface RefreshCache<T> {
-  refreshIfDue(): Promise<void>;
+  // Resolves to whether this call actually attempted a fetch, so a caller
+  // that needs to distinguish "this cycle's own outcome" from "restating the
+  // last attempt's outcome on an off-cadence cycle" (e.g. whether to count a
+  // parse failure once, not once per poll cycle until the next fetch) can do
+  // so without its own bookkeeping.
+  refreshIfDue(): Promise<boolean>;
   getCached(): T;
 }
 
@@ -20,16 +25,20 @@ export interface RefreshCache<T> {
 //
 // "Due" is judged from when the last refresh *started*, not when it
 // finished, so a fetch that itself takes longer than intervalMs cannot
-// trigger a second overlapping fetch on the next refreshIfDue() call.
+// trigger a second overlapping fetch on the next refreshIfDue() call — this
+// guarantee assumes a caller never invokes refreshIfDue() again before a
+// prior call's returned Promise has settled; every collector in this
+// codebase satisfies that today because TargetPoller awaits one whole poll
+// cycle to completion before starting the next.
 export function createRefreshCache<T>(options: RefreshCacheOptions<T>): RefreshCache<T> {
   const { clock, intervalMs, fetch, onFailure } = options;
   let value = options.initialValue;
   let lastStartedAt: number | undefined;
 
   return {
-    async refreshIfDue(): Promise<void> {
+    async refreshIfDue(): Promise<boolean> {
       const now = clock.now();
-      if (lastStartedAt !== undefined && now - lastStartedAt < intervalMs) return;
+      if (lastStartedAt !== undefined && now - lastStartedAt < intervalMs) return false;
       lastStartedAt = now;
 
       try {
@@ -40,6 +49,7 @@ export function createRefreshCache<T>(options: RefreshCacheOptions<T>): RefreshC
         // a stale-but-present cache beats an empty one.
         onFailure?.(error);
       }
+      return true;
     },
 
     getCached(): T {

@@ -3,19 +3,20 @@ import type { AppConfig, TargetConfig } from "../config/types.ts";
 import { createAgent } from "../http/agent.ts";
 import { HttpClient } from "../http/client.ts";
 import type { Clock } from "../http/clock.ts";
+import { ClusterCollector } from "../metrics/cluster-collector.ts";
 import { NativeCollector } from "../metrics/native-collector.ts";
 import { SessionCollector } from "../metrics/session-collector.ts";
 import { ZoneCollector } from "../metrics/zone-collector.ts";
 import { PollCycleTracker } from "./cache.ts";
 import { TargetPoller } from "./target-poller.ts";
 
-// The two enabled-here collectors' own required permission sections
+// These three enabled-here collectors' own required permission sections
 // (session-collector.ts's internal COLLECTOR_PERMISSION_REQUIREMENTS table
-// isn't exported, so this mirrors just the "native"/"zones" rows of it —
-// deliberately not "cluster"/"stats", whose collectors don't exist until
-// Phases 8-9).
+// isn't exported, so this mirrors those rows of it — deliberately not
+// "stats", whose collector doesn't exist until Phase 9).
 const NATIVE_PERMISSION_SECTION = "Dashboard";
 const ZONES_PERMISSION_SECTION = "Zones";
+const CLUSTER_PERMISSION_SECTION = "Administration";
 
 function defaultHttpClient(target: TargetConfig, config: AppConfig, clock: Clock): HttpClient {
   const dispatcher = createAgent({
@@ -54,6 +55,7 @@ export interface CycleSummary {
   readonly session: "success" | "failure";
   readonly native: "success" | "failure" | "skipped";
   readonly zones: "success" | "failure" | "skipped";
+  readonly cluster: "success" | "failure" | "skipped";
 }
 
 // Narrowed to just the .labels(...).set(...) shape runTargetCycle actually
@@ -69,6 +71,9 @@ export interface TargetCollectors {
   };
   readonly native: Pick<NativeCollector, "collect">;
   readonly zones: Pick<ZoneCollector, "collect">;
+  // Absent when ENABLE_CLUSTER_COLLECTOR is off (D§4.2's default), unlike
+  // native/zones, which have no such opt-out flag.
+  readonly cluster?: Pick<ClusterCollector, "collect" | "notClustered"> | undefined;
 }
 
 export interface TargetCycleResult {
@@ -88,11 +93,12 @@ export interface TargetCycleResult {
 // native/zones never get a chance to try — their own success series must
 // read 0 too rather than freezing at whatever they last reported (N6).
 export async function runTargetCycle(collectors: TargetCollectors): Promise<TargetCycleResult> {
-  const { session, native, zones } = collectors;
+  const { session, native, zones, cluster } = collectors;
   const sessionResult = await session.collect();
 
   let nativeOutcome: CycleSummary["native"] = "skipped";
   let zoneOutcome: CycleSummary["zones"] = "skipped";
+  let clusterOutcome: CycleSummary["cluster"] = "skipped";
   let hadParseError = sessionResult.kind === "failure" && sessionResult.reason === "parse";
 
   if (sessionResult.kind === "success") {
@@ -117,14 +123,54 @@ export async function runTargetCycle(collectors: TargetCollectors): Promise<Targ
       );
     }
 
+    if (cluster !== undefined) {
+      if (
+        sessionResult.info.clusterInitialized &&
+        permissions[CLUSTER_PERMISSION_SECTION]?.canView
+      ) {
+        tasks.push(
+          cluster.collect().then((result) => {
+            clusterOutcome = result.kind;
+            // Only a fresh attempt's own parse failure counts once — an
+            // off-cadence cycle just restates the last real attempt's
+            // outcome and must not re-trigger hadParseError on every such
+            // cycle until the next actual fetch (D§5.7).
+            if (result.fresh && result.kind === "failure" && result.reason === "parse") {
+              hadParseError = true;
+            }
+          }),
+        );
+      } else if (!sessionResult.info.clusterInitialized) {
+        // admin/cluster/state has nothing cluster-shaped to report for a
+        // standalone node, so this clears the four value fields and
+        // collector_success's own "cluster" child rather than either
+        // calling the endpoint forever or leaving them frozen at whatever
+        // they last reported while clustered — the same "no cluster claims
+        // to make" reasoning session-metrics.ts's own
+        // applyClusterPeers(metrics, undefined) uses. A missing
+        // Administration: View grant on an otherwise-clustered target is
+        // deliberately not handled here: session-collector.ts's own
+        // permission-gating loop already zeroes collector_success{cluster}
+        // and warns once for that case (D§4.4), which is the correct signal
+        // — unlike this one, it isn't reporting false health.
+        cluster.notClustered();
+      }
+    }
+
     await Promise.all(tasks);
   } else {
     session.collectorSuccess.labels({ collector: "native" }).set(0);
     session.collectorSuccess.labels({ collector: "zones" }).set(0);
+    if (cluster !== undefined) session.collectorSuccess.labels({ collector: "cluster" }).set(0);
   }
 
   return {
-    summary: { session: sessionResult.kind, native: nativeOutcome, zones: zoneOutcome },
+    summary: {
+      session: sessionResult.kind,
+      native: nativeOutcome,
+      zones: zoneOutcome,
+      cluster: clusterOutcome,
+    },
     hadParseError,
   };
 }
@@ -205,7 +251,9 @@ function buildEntry(
   const session = new SessionCollector({
     httpClient,
     registry,
-    enabledCollectors: ["native", "zones"],
+    enabledCollectors: config.enableClusterCollector
+      ? ["native", "zones", "cluster"]
+      : ["native", "zones"],
     warn: (message) => options.warn(target.name, message),
   });
   const native = new NativeCollector({
@@ -220,11 +268,21 @@ function buildEntry(
     unknownEnum: session.unknownEnum,
     includeInternal: config.zonesIncludeInternal,
   });
+  const cluster = config.enableClusterCollector
+    ? new ClusterCollector({
+        httpClient,
+        registry,
+        collectorSuccess: session.collectorSuccess,
+        clock: options.clock,
+        intervalMs: config.clusterPollIntervalSeconds * 1000,
+        warn: (message) => options.warn(target.name, message),
+      })
+    : undefined;
 
   const pollTracker = new PollCycleTracker<CycleSummary>();
 
   const runCycle = async (): Promise<void> => {
-    const { summary, hadParseError } = await runTargetCycle({ session, native, zones });
+    const { summary, hadParseError } = await runTargetCycle({ session, native, zones, cluster });
     // Monotonic, per IMPLEMENTATION.md's "Shared primitives": clock.now()
     // (Date.now()) would step backwards or jump under an NTP correction,
     // fabricating a negative or bogus cache age once Phase 10 exposes this.

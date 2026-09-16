@@ -18,6 +18,18 @@ const SESSION_V15_CLUSTERED = readFileSync("test/fixtures/session/session-get-v1
 const INVALID_TOKEN = readFileSync("test/fixtures/session/envelope-invalid-token.json", "utf8");
 const NATIVE_CURRENT = readFileSync("test/fixtures/native/metrics-text-current-names.txt", "utf8");
 const ZONES_LIST = readFileSync("test/fixtures/zones/zones-list.json", "utf8");
+const CLUSTER_STATE = readFileSync("test/fixtures/cluster/cluster-state.json", "utf8");
+
+// SESSION_V15_CLUSTERED's own fixture token has Administration: View denied
+// (it's the fixture native/zones tests already share), so the
+// cluster-collector wiring tests need their own copy with that grant added.
+const SESSION_V15_ADMIN_GRANTED = (() => {
+  const raw = JSON.parse(SESSION_V15_CLUSTERED) as {
+    info: { permissions: Record<string, { canView: boolean }> };
+  };
+  raw.info.permissions.Administration = { canView: true };
+  return JSON.stringify(raw);
+})();
 
 function target(name: string): TargetConfig {
   return {
@@ -29,7 +41,10 @@ function target(name: string): TargetConfig {
   };
 }
 
-function baseConfig(targets: readonly TargetConfig[]): AppConfig {
+function baseConfig(
+  targets: readonly TargetConfig[],
+  overrides: Partial<AppConfig> = {},
+): AppConfig {
   return {
     targets,
     metricsPort: 10053,
@@ -46,6 +61,7 @@ function baseConfig(targets: readonly TargetConfig[]): AppConfig {
     logLevel: "info",
     logFormat: "json",
     metricsTls: undefined,
+    ...overrides,
   };
 }
 
@@ -71,6 +87,30 @@ async function metricValue(registry: { getMetricsAsJSON: () => Promise<unknown> 
     values: Array<{ value: number }>;
   }>;
   return metrics.find((m) => m.name === name)?.values[0]?.value;
+}
+
+// Same routing as routedClient, but records every call by path so a test can
+// assert a given endpoint was never reached at all — routedClient throwing
+// on an unstubbed path only proves that a call to it, if made, wouldn't have
+// been served a real fixture; it does not prove no call was attempted, since
+// createRefreshCache's own catch would swallow that thrown error into an
+// ordinary failure outcome indistinguishable from the collector never having
+// been invoked.
+function trackedRoutedClient(routes: Readonly<Record<string, string | (() => Promise<never>)>>): {
+  get: (path: string) => Promise<{ statusCode: number; body: string }>;
+  callsFor(path: string): number;
+} {
+  const calls = new Map<string, number>();
+  return {
+    get: async (path: string) => {
+      calls.set(path, (calls.get(path) ?? 0) + 1);
+      const body = routes[path];
+      if (body === undefined) throw new Error(`unstubbed path: ${path}`);
+      if (typeof body === "function") return body();
+      return { statusCode: 200, body };
+    },
+    callsFor: (path: string) => calls.get(path) ?? 0,
+  };
 }
 
 describe("TargetRegistry", () => {
@@ -188,6 +228,253 @@ describe("TargetRegistry", () => {
 
     assert.equal(await metricValue(mustGet(registry, "dns-a").registry, "technitium_up"), 1);
     assert.equal(await metricValue(mustGet(registry, "dns-b").registry, "technitium_up"), 0);
+  });
+
+  it("runs the cluster collector when enabled and Administration: View is granted", async () => {
+    const registry = new TargetRegistry(
+      baseConfig([target("dns-a")], { enableClusterCollector: true }),
+      {
+        clock: new FakeClock(),
+        warn: () => {},
+        createHttpClient: () =>
+          routedClient({
+            "/api/user/session/get": SESSION_V15_ADMIN_GRANTED,
+            "/api/dashboard/metrics/text": NATIVE_CURRENT,
+            "/api/zones/list": ZONES_LIST,
+            "/api/admin/cluster/state": CLUSTER_STATE,
+          }),
+      },
+    );
+
+    const entry = mustGet(registry, "dns-a");
+    await entry.runCycle();
+
+    assert.equal(
+      await metricValue(entry.registry, "technitium_cluster_heartbeat_refresh_interval_seconds"),
+      30,
+    );
+    const metrics = (await entry.registry.getMetricsAsJSON()) as Array<{
+      name: string;
+      values: Array<{ value: number; labels: Record<string, string> }>;
+    }>;
+    const success = metrics.find((m) => m.name === "technitium_collector_success")?.values ?? [];
+    assert.ok(success.some((v) => v.labels.collector === "cluster" && v.value === 1));
+  });
+
+  it("auto-skips the cluster collector when Administration: View is absent, without ever calling admin/cluster/state or disturbing the session-sourced peer state set (D§4.4)", async () => {
+    const warnings: string[] = [];
+    const client = trackedRoutedClient({
+      "/api/user/session/get": SESSION_V15_CLUSTERED,
+      "/api/dashboard/metrics/text": NATIVE_CURRENT,
+      "/api/zones/list": ZONES_LIST,
+    });
+    const registry = new TargetRegistry(
+      baseConfig([target("dns-a")], { enableClusterCollector: true }),
+      {
+        clock: new FakeClock(),
+        warn: (_targetName, message) => warnings.push(message),
+        createHttpClient: () => client,
+      },
+    );
+
+    const entry = mustGet(registry, "dns-a");
+    await entry.runCycle();
+
+    assert.equal(client.callsFor("/api/admin/cluster/state"), 0);
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0] ?? "", /cluster.*Administration/);
+
+    const metrics = (await entry.registry.getMetricsAsJSON()) as Array<{
+      name: string;
+      values: Array<{ value: number; labels: Record<string, string> }>;
+    }>;
+    const success = metrics.find((m) => m.name === "technitium_collector_success")?.values ?? [];
+    assert.deepEqual(
+      success.find((v) => v.labels.collector === "cluster"),
+      { value: 0, labels: { collector: "cluster" } },
+    );
+    // Phase 4's peer state set rides session/get with no permission at all,
+    // so it must still be present even though the config-detail collector
+    // was skipped.
+    const peerState = metrics.find((m) => m.name === "technitium_cluster_node_state")?.values ?? [];
+    assert.ok(peerState.length > 0);
+  });
+
+  it("never registers a cluster collector_success series when ENABLE_CLUSTER_COLLECTOR is off, but still exposes the session-sourced peer state set", async () => {
+    const registry = new TargetRegistry(baseConfig([target("dns-a")]), {
+      clock: new FakeClock(),
+      warn: () => {},
+      createHttpClient: () =>
+        routedClient({
+          "/api/user/session/get": SESSION_V15_ADMIN_GRANTED,
+          "/api/dashboard/metrics/text": NATIVE_CURRENT,
+          "/api/zones/list": ZONES_LIST,
+        }),
+    });
+
+    const entry = mustGet(registry, "dns-a");
+    await entry.runCycle();
+
+    const metrics = (await entry.registry.getMetricsAsJSON()) as Array<{
+      name: string;
+      values: Array<{ value: number; labels: Record<string, string> }>;
+    }>;
+    const success = metrics.find((m) => m.name === "technitium_collector_success")?.values ?? [];
+    assert.equal(
+      success.some((v) => v.labels.collector === "cluster"),
+      false,
+    );
+    const peerState = metrics.find((m) => m.name === "technitium_cluster_node_state")?.values ?? [];
+    assert.ok(peerState.length > 0);
+  });
+
+  it("with ENABLE_CLUSTER_COLLECTOR off and Administration: View also absent (the common least-privilege deployment), never warns about the cluster collector at all", async () => {
+    const warnings: string[] = [];
+    const registry = new TargetRegistry(baseConfig([target("dns-a")]), {
+      clock: new FakeClock(),
+      warn: (_targetName, message) => warnings.push(message),
+      createHttpClient: () =>
+        routedClient({
+          "/api/user/session/get": SESSION_V15_CLUSTERED,
+          "/api/dashboard/metrics/text": NATIVE_CURRENT,
+          "/api/zones/list": ZONES_LIST,
+        }),
+    });
+
+    const entry = mustGet(registry, "dns-a");
+    await entry.runCycle();
+
+    assert.equal(
+      warnings.some((w) => /cluster/i.test(w)),
+      false,
+    );
+  });
+
+  it("never calls admin/cluster/state, without warning, for a target that has never been clustered", async () => {
+    const raw = JSON.parse(SESSION_V15_ADMIN_GRANTED) as {
+      info: { clusterInitialized: boolean };
+    };
+    raw.info.clusterInitialized = false;
+    const nonClustered = JSON.stringify(raw);
+
+    const warnings: string[] = [];
+    const client = trackedRoutedClient({
+      "/api/user/session/get": nonClustered,
+      "/api/dashboard/metrics/text": NATIVE_CURRENT,
+      "/api/zones/list": ZONES_LIST,
+    });
+    const registry = new TargetRegistry(
+      baseConfig([target("dns-a")], { enableClusterCollector: true }),
+      {
+        clock: new FakeClock(),
+        warn: (_targetName, message) => warnings.push(message),
+        createHttpClient: () => client,
+      },
+    );
+
+    const entry = mustGet(registry, "dns-a");
+    await entry.runCycle();
+
+    assert.equal(client.callsFor("/api/admin/cluster/state"), 0);
+    assert.equal(warnings.length, 0);
+    const metrics = (await entry.registry.getMetricsAsJSON()) as Array<{
+      name: string;
+      values: Array<{ value: number; labels: Record<string, string> }>;
+    }>;
+    const success = metrics.find((m) => m.name === "technitium_collector_success")?.values ?? [];
+    assert.equal(
+      success.some((v) => v.labels.collector === "cluster"),
+      false,
+    );
+  });
+
+  it("clears the four config-detail series and the cluster collector_success child, rather than freezing them at a stale value, once a previously-clustered target loses clustering", async () => {
+    const clusteredSession = SESSION_V15_ADMIN_GRANTED;
+    const raw = JSON.parse(SESSION_V15_ADMIN_GRANTED) as {
+      info: { clusterInitialized: boolean };
+    };
+    raw.info.clusterInitialized = false;
+    const nowNonClustered = JSON.stringify(raw);
+
+    let sessionBody = clusteredSession;
+    // Routes session/get through a mutable body so it can change between
+    // cycles while every other route stays fixed on the plain routedClient.
+    const client = {
+      get: (path: string) =>
+        path === "/api/user/session/get"
+          ? Promise.resolve({ statusCode: 200, body: sessionBody })
+          : routedClient({
+              "/api/dashboard/metrics/text": NATIVE_CURRENT,
+              "/api/zones/list": ZONES_LIST,
+              "/api/admin/cluster/state": CLUSTER_STATE,
+            }).get(path),
+    };
+    const registry = new TargetRegistry(
+      baseConfig([target("dns-a")], { enableClusterCollector: true }),
+      {
+        clock: new FakeClock(),
+        warn: () => {},
+        createHttpClient: () => client,
+      },
+    );
+
+    const entry = mustGet(registry, "dns-a");
+    await entry.runCycle();
+    assert.equal(
+      await metricValue(entry.registry, "technitium_cluster_heartbeat_refresh_interval_seconds"),
+      30,
+    );
+
+    sessionBody = nowNonClustered;
+    await entry.runCycle();
+
+    const metrics = (await entry.registry.getMetricsAsJSON()) as Array<{
+      name: string;
+      values: Array<{ value: number; labels: Record<string, string> }>;
+    }>;
+    assert.deepEqual(
+      metrics.find((m) => m.name === "technitium_cluster_heartbeat_refresh_interval_seconds")
+        ?.values ?? [],
+      [],
+    );
+    const success = metrics.find((m) => m.name === "technitium_collector_success")?.values ?? [];
+    assert.equal(
+      success.some((v) => v.labels.collector === "cluster"),
+      false,
+    );
+  });
+
+  it("counts a cluster parse failure exactly once, not again on a later off-cadence cycle that merely restates it", async () => {
+    const clock = new FakeClock();
+    const client = trackedRoutedClient({
+      "/api/user/session/get": SESSION_V15_ADMIN_GRANTED,
+      "/api/dashboard/metrics/text": NATIVE_CURRENT,
+      "/api/zones/list": ZONES_LIST,
+      "/api/admin/cluster/state": "not valid json",
+    });
+    const registry = new TargetRegistry(
+      baseConfig([target("dns-a")], {
+        enableClusterCollector: true,
+        clusterPollIntervalSeconds: 60,
+      }),
+      {
+        clock,
+        warn: () => {},
+        createHttpClient: () => client,
+      },
+    );
+
+    const entry = mustGet(registry, "dns-a");
+    await entry.runCycle();
+    assert.equal(entry.pollTracker.parseErrorCycles, 1);
+
+    // Well inside the 60s cluster cadence, so the second cycle's own
+    // refreshIfDue() is a no-op and cluster.collect() only restates the
+    // first cycle's already-counted parse failure.
+    clock.advance(1_000);
+    await entry.runCycle();
+
+    assert.equal(entry.pollTracker.parseErrorCycles, 1);
   });
 
   it("records fetchedAt from the monotonic clock, not wall time", async () => {

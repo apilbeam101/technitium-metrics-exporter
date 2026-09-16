@@ -149,14 +149,20 @@ The independent-cadence primitive:
 
 ```ts
 createRefreshCache<T>({ clock, intervalMs, fetch, initialValue, onFailure })
-  => { refreshIfDue(), getCached() }
+  => { refreshIfDue(): Promise<boolean>, getCached(): T }
 ```
 
-`refreshIfDue()` is called only from the poll path. The render path calls only
-the synchronous, network-free `getCached()`. A failed refresh retains the
-previous value and does not throw. This is how the cluster and statistics
-collectors get slower cadences than the main loop without introducing a second
-scheduler.
+`refreshIfDue()` resolves to whether it actually attempted a fetch this call,
+so a caller can tell a cycle that made a real attempt (and so may legitimately
+count that attempt's own failure, e.g. toward
+`technitium_exporter_poll_errors_total`) apart from an off-cadence cycle that's
+merely restating the last attempt's outcome because the interval hasn't
+elapsed yet. `getCached()` is synchronous and network-free, so a collector's
+own `collect()` can call both every poll cycle — `refreshIfDue()` to throttle
+the network call, `getCached()` to read whatever the last successful fetch (or
+`initialValue`) produced — without a second scheduler. A failed refresh
+retains the previous value and does not throw. This is how the cluster and
+statistics collectors get slower cadences than the main loop.
 
 ### `poller/cache.ts`
 
