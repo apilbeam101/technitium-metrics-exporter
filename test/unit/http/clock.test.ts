@@ -23,4 +23,41 @@ describe("systemClock", () => {
     const end = systemClock.elapsed();
     assert.ok(end - start >= 9);
   });
+
+  it("sleep() resolves early when its signal is aborted, well before the requested duration", async () => {
+    const controller = new AbortController();
+    const start = systemClock.elapsed();
+    const promise = systemClock.sleep(60_000, controller.signal);
+    controller.abort();
+    await promise;
+    assert.ok(systemClock.elapsed() - start < 1_000);
+  });
+
+  it("sleep() resolves immediately when handed an already-aborted signal", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const start = systemClock.elapsed();
+    await systemClock.sleep(60_000, controller.signal);
+    assert.ok(systemClock.elapsed() - start < 1_000);
+  });
+
+  it("sleep() clears its underlying timer on abort rather than leaving it live", async () => {
+    const controller = new AbortController();
+    let clearedHandle: unknown;
+    const originalClearTimeout = global.clearTimeout;
+    global.clearTimeout = ((handle: Parameters<typeof clearTimeout>[0]) => {
+      clearedHandle = handle;
+      return originalClearTimeout(handle);
+    }) as typeof clearTimeout;
+
+    try {
+      const promise = systemClock.sleep(60_000, controller.signal);
+      controller.abort();
+      await promise;
+    } finally {
+      global.clearTimeout = originalClearTimeout;
+    }
+
+    assert.notEqual(clearedHandle, undefined);
+  });
 });

@@ -38,6 +38,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Zone metrics surface (`src/metrics/zone-metrics.ts`): `technitium_zone_soa_serial`, `technitium_zone_disabled`, `technitium_zone_last_modified_timestamp_seconds`, `technitium_zone_dnssec_status` (state set), `technitium_zone_expiry_timestamp_seconds`, `technitium_zone_expired`, `technitium_zone_sync_failed`, `technitium_zone_notify_failed`, `technitium_zone_notify_failed_peers`, `technitium_zones_visible`, `technitium_zones_by_type`, `technitium_zones_excluded_internal` — internal system zones excluded by default (controlled by `ZONES_INCLUDE_INTERNAL` config flag); failed poll clears zone inventory to genuinely absent rather than freezing it, since zone health is a live snapshot
 - Zone collector (`src/metrics/zone-collector.ts`) tying HTTP fetch, parse, and metric application together, sharing `collectorSuccess` and `unknownEnum` metrics with the session collector
 - Shared `AbsentUntilSetGauge` wrapper (`src/metrics/absent-gauge.ts`) for label-free gauges that must be genuinely absent (not zero) until they have a real value, extracted from duplicated private classes in native and session metrics
+- Multi-target poller (`src/poller/`): per-target poll loop with in-memory snapshot cache, independent refresh cadences for slow collectors via `refreshIfDue()` and `getCached()`, immutable cache semantics to decouple rendering from polling (N2)
+- Per-target Prometheus registries (`src/poller/target-registry.ts`) for per-target isolation (N3) and correct series disappearance on zone/peer deletion
+- HTTP server (`src/server/`): `/metrics`, `/metrics?target=<name>`, `/healthz`, `/readyz` endpoints, TLS listener support with optional mTLS client cert validation, 400 on unknown target, global registry for build info and target count
+- CLI entry point (`src/cli.ts`) with `--port`, `--bind`, `--tls-cert`, `--tls-key`, `--tls-client-ca` flags, and `--dump-raw` diagnostic output mode
+- Graceful shutdown (`src/lifecycle.ts`): SIGTERM/SIGINT handler, in-flight request timeout, polite poller drain
+- Startup sequence (`src/index.ts`): Node version floor check, config load, HTTP server creation, poller spawn, signal binding, clean shutdown path
+- Build-time version (`src/version.ts`) from `package.json`
+- Structured logging (`src/log/logger.ts`) with level-aware output and correlation ID support
+- Integration tests (`test/integration/`) covering multi-target polling, per-target registry rendering, endpoint authentication, TLS handshake, graceful shutdown sequence
 
 ### Fixed
 
