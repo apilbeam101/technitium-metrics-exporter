@@ -232,4 +232,67 @@ describe("SessionCollector.collect", () => {
       false,
     );
   });
+
+  it("exposes the shared collector_success Gauge so another collector can write into the same series", async () => {
+    const registry = new Registry();
+    const c = collector(registry, stubClient(V15_CLUSTERED));
+
+    c.collectorSuccess.labels({ collector: "native" }).set(1);
+
+    const metrics = await registry.getMetricsAsJSON();
+    const success = metrics.find((m) => m.name === "technitium_collector_success")?.values ?? [];
+    assert.deepEqual(success, [{ value: 1, labels: { collector: "native" } }]);
+  });
+
+  it("never removes another collector's own collector_success value on a later cycle where permission is still granted", async () => {
+    const registry = new Registry();
+    const c = collector(registry, stubClient(V15_CLUSTERED), { enabledCollectors: ["native"] });
+    await c.collect();
+
+    // Simulates the native collector having already written its own real
+    // outcome into the shared series between session poll cycles.
+    c.collectorSuccess.labels({ collector: "native" }).set(1);
+
+    await c.collect();
+
+    const metrics = await registry.getMetricsAsJSON();
+    const success = metrics.find((m) => m.name === "technitium_collector_success")?.values ?? [];
+    assert.deepEqual(
+      success.find((v) => v.labels.collector === "native"),
+      { value: 1, labels: { collector: "native" } },
+    );
+  });
+
+  it("still removes a stale forced-zero series exactly once, the first time a previously missing permission is granted", async () => {
+    const registry = new Registry();
+    const raw = JSON.parse(V15_CLUSTERED) as {
+      info: { permissions: Record<string, { canView: boolean }> };
+    };
+    raw.info.permissions.Administration = { canView: false };
+    let currentBody = JSON.stringify(raw);
+    const c = collector(
+      registry,
+      { get: async () => ({ statusCode: 200, body: currentBody }) },
+      { enabledCollectors: ["cluster"] },
+    );
+    await c.collect();
+
+    let metrics = await registry.getMetricsAsJSON();
+    let success = metrics.find((m) => m.name === "technitium_collector_success")?.values ?? [];
+    assert.deepEqual(
+      success.find((v) => v.labels.collector === "cluster"),
+      { value: 0, labels: { collector: "cluster" } },
+    );
+
+    raw.info.permissions.Administration = { canView: true };
+    currentBody = JSON.stringify(raw);
+    await c.collect();
+
+    metrics = await registry.getMetricsAsJSON();
+    success = metrics.find((m) => m.name === "technitium_collector_success")?.values ?? [];
+    assert.equal(
+      success.some((v) => v.labels.collector === "cluster"),
+      false,
+    );
+  });
 });

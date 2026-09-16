@@ -2,7 +2,7 @@ import type { Registry } from "@prometheus-io/client";
 import type { SessionInfo, SessionPermission } from "../api/session.ts";
 import { parseSessionResponse } from "../api/session.ts";
 import type { HttpClient } from "../http/client.ts";
-import { type PollErrorReason, TechnitiumHttpError } from "../http/errors.ts";
+import { type PollErrorReason, reasonOfError } from "../http/errors.ts";
 import {
   applySessionFailure,
   applySessionSuccess,
@@ -43,16 +43,6 @@ export type SessionCollectResult =
   | { readonly kind: "success"; readonly info: SessionInfo }
   | { readonly kind: "failure"; readonly reason: PollErrorReason };
 
-// A TypeError surfacing here is a malformed-body shape mismatch (e.g.
-// clusterNodes present but not an array) that slipped past the envelope
-// classification's own explicit "parse" throws — per D§5.7's reason
-// taxonomy it belongs in "parse", not the catch-all "unknown".
-function reasonOf(error: unknown): PollErrorReason {
-  if (error instanceof TechnitiumHttpError) return error.reason;
-  if (error instanceof TypeError) return "parse";
-  return "unknown";
-}
-
 // Per-target startup/poll preflight: reaches session/get (no permission
 // needed), derives technitium_up from the actual call outcome (N6, never a
 // constant), and gates every other enabled collector against the token's
@@ -64,6 +54,15 @@ export class SessionCollector {
   readonly #enabledCollectors: readonly string[];
   readonly #warn: (message: string) => void;
   readonly #warnedCollectors = new Set<string>();
+  // Tracks which enabled collectors this preflight is *currently* forcing to
+  // 0 for a missing permission, so the granted branch below only removes
+  // that forced-0 series on the transition out of gating, not on every
+  // subsequent cycle permission stays granted. Without this, an ungated
+  // collector sharing this same Gauge instance (D§4.4) would have its own,
+  // independently-written series deleted out from under it on every session
+  // poll cycle, including during the window between that collector's own
+  // HTTP call and its own write.
+  readonly #gatedCollectors = new Set<string>();
   #wasFailing = false;
 
   constructor(options: SessionCollectorOptions) {
@@ -71,6 +70,14 @@ export class SessionCollector {
     this.#metrics = createSessionMetrics(options.registry);
     this.#enabledCollectors = options.enabledCollectors;
     this.#warn = options.warn;
+  }
+
+  // Exposed so another collector sharing this target's Registry can write
+  // to the same technitium_collector_success{collector=...} series this
+  // preflight also gates (D§4.4) instead of each registering its own Gauge
+  // of the same name, which a Registry rejects as a duplicate.
+  get collectorSuccess(): SessionMetrics["collectorSuccess"] {
+    return this.#metrics.collectorSuccess;
   }
 
   async collect(): Promise<SessionCollectResult> {
@@ -103,7 +110,7 @@ export class SessionCollector {
   // the same "state persists across calls" shape as #warnedCollectors below.
   #fail(error: unknown): SessionCollectResult {
     applySessionFailure(this.#metrics);
-    const reason = reasonOf(error);
+    const reason = reasonOfError(error);
     if (!this.#wasFailing) {
       const message = error instanceof Error ? error.message : String(error);
       this.#warn(`session collector failed (${reason}): ${message}`);
@@ -117,12 +124,16 @@ export class SessionCollector {
       if (!this.#enabledCollectors.includes(collector)) continue;
 
       if (permissions[section]?.canView) {
-        this.#metrics.collectorSuccess.remove({ collector });
+        if (this.#gatedCollectors.has(collector)) {
+          this.#metrics.collectorSuccess.remove({ collector });
+          this.#gatedCollectors.delete(collector);
+        }
         this.#warnedCollectors.delete(collector);
         continue;
       }
 
       this.#metrics.collectorSuccess.labels({ collector }).set(0);
+      this.#gatedCollectors.add(collector);
 
       if (!this.#warnedCollectors.has(collector)) {
         this.#warn(

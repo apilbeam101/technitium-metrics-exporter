@@ -434,6 +434,18 @@ Alongside them:
 These are genuine Prometheus **counters**, because the underlying values are
 monotonic lifetime totals.
 
+Each of the thirteen fields above is independently absent-or-present, not
+all-or-nothing: a single field missing from an otherwise well-formed response
+(the exact shape of an in-progress upstream rename) is not a parse failure. It
+increments `technitium_exporter_unknown_native_metric_total` for whatever new
+name appeared and leaves that field's own series genuinely absent, rather than
+erroring the entire poll cycle and discarding the one signal designed to make
+the rename visible. This is distinct from a fully failed poll cycle (server
+unreachable, token rejected): there, every already-registered counter and
+gauge here holds its last known value rather than resetting, the same way
+Prometheus itself treats a target that's briefly unreachable — only a field
+that's missing from an otherwise-*successful* response goes absent.
+
 ### 5.5 Window-derived statistics
 
 **Design rule: a sliding-window value is never exported as a counter.** It is

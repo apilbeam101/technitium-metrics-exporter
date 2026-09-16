@@ -262,15 +262,26 @@ three peer metrics.
 
 `api/native-text.ts`: a parser for this endpoint's grammar only — `# HELP`,
 `# TYPE`, `name value`, with no labels, timestamps or exemplars — plus
-content-type and leading-`{` detection routing an error body to the envelope
-handler.
+leading-`{` detection routing an error body to the envelope handler. No valid
+Prometheus exposition line can begin with `{` (this endpoint emits no labels
+at all, D§3.2.2), so the body's own shape is a sufficient signal on its own;
+the HTTP response's Content-Type header isn't used, since `http/client.ts`'s
+`RawResponse` doesn't carry response headers and the body-shape check alone
+is already exhaustive per D§3.2.1's documented dual-format behaviour.
 
 Dual-spelling name map, millisecond conversion, unknown-metric counter,
-`technitium_lifetime_counters_supported`.
+`technitium_lifetime_counters_supported`. A metric name missing from an
+otherwise well-formed response is not a parse failure — each of the thirteen
+fields is independently absent-or-present, so one upstream rename shows up as
+an incremented unknown-metric counter and one absent series, not as a parse
+error that discards the unknown name and freezes or zeroes every unrelated
+counter too.
 
 **Exit:** golden-file tests show both spellings producing byte-identical output;
-an unknown name increments the counter without breaking the render; a JSON error
-body produces no phantom counters.
+an unknown name increments the counter without breaking the render, and the
+renamed field's own series goes absent rather than erroring the whole cycle; a
+JSON error body produces no phantom counters — every one of the thirteen
+fields is genuinely absent, not present-and-zero.
 
 ## Phase 6 — Zone collector
 

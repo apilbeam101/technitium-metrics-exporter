@@ -1,0 +1,62 @@
+# HELP technitium_collector_success Per-collector outcome of the last poll cycle
+# TYPE technitium_collector_success gauge
+technitium_collector_success{collector="native"} 1
+
+# HELP technitium_lifetime_counters_supported 0 when metrics/text was missing or unparseable on the last poll
+# TYPE technitium_lifetime_counters_supported gauge
+technitium_lifetime_counters_supported 1
+
+# HELP technitium_exporter_unknown_native_metric_total Count of metric names seen from metrics/text outside this exporter's recognized set
+# TYPE technitium_exporter_unknown_native_metric_total counter
+
+# HELP technitium_queries_total Total DNS queries received, normalised from metrics/text (either name spelling)
+# TYPE technitium_queries_total counter
+technitium_queries_total 100000
+
+# HELP technitium_no_error_total Total queries answered NOERROR, normalised from metrics/text
+# TYPE technitium_no_error_total counter
+technitium_no_error_total 90000
+
+# HELP technitium_server_failure_total Total queries answered SERVFAIL, normalised from metrics/text
+# TYPE technitium_server_failure_total counter
+technitium_server_failure_total 500
+
+# HELP technitium_nx_domain_total Total queries answered NXDOMAIN, normalised from metrics/text
+# TYPE technitium_nx_domain_total counter
+technitium_nx_domain_total 4000
+
+# HELP technitium_refused_total Total queries answered REFUSED, normalised from metrics/text
+# TYPE technitium_refused_total counter
+technitium_refused_total 100
+
+# HELP technitium_authoritative_total Total queries answered authoritatively, normalised from metrics/text
+# TYPE technitium_authoritative_total counter
+technitium_authoritative_total 60000
+
+# HELP technitium_recursive_total Total queries answered recursively, normalised from metrics/text
+# TYPE technitium_recursive_total counter
+technitium_recursive_total 40000
+
+# HELP technitium_cached_total Total queries answered from cache, normalised from metrics/text
+# TYPE technitium_cached_total counter
+technitium_cached_total 30000
+
+# HELP technitium_blocked_total Total queries blocked, normalised from metrics/text
+# TYPE technitium_blocked_total counter
+technitium_blocked_total 5000
+
+# HELP technitium_dropped_total Total queries dropped, normalised from metrics/text
+# TYPE technitium_dropped_total counter
+technitium_dropped_total 100
+
+# HELP technitium_clients_total Total distinct clients seen, normalised from metrics/text
+# TYPE technitium_clients_total counter
+technitium_clients_total 250
+
+# HELP technitium_uptime_seconds Seconds elapsed since the DNS server process started
+# TYPE technitium_uptime_seconds gauge
+technitium_uptime_seconds 12345
+
+# HELP technitium_start_time_seconds Unix time the DNS server process started, converted from milliseconds
+# TYPE technitium_start_time_seconds gauge
+technitium_start_time_seconds 1700000000

@@ -29,3 +29,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Cluster peer inventory metrics (`technitium_cluster_node_state`, `technitium_cluster_node_last_seen_timestamp_seconds`, `technitium_cluster_nodes`) sourced from `session/get` without extra permission or call
 - Server info metrics (`technitium_server_version_info`, `technitium_server_version_supported`, `technitium_server_domain_info`) and cluster-initialized flag (`technitium_cluster_initialized`) from session preflight
 - Permission gating: one warning per collector on transition to skipped/failed state, `technitium_collector_success{collector}` set to 0 while gated/failing and removed (not 1) on permission restore
+- Native metrics parser and collector (`src/api/native-text.ts`, `src/metrics/native-metrics.ts`, `src/metrics/native-collector.ts`): parses Technitium's `GET /api/dashboard/metrics/text` endpoint (Prometheus text format subset), maps upstream's dual counter-name spellings (e.g. `total_queries`/`queries_total`) to stable `technitium_`-prefixed names, converts `start_time` from milliseconds to seconds, handles missing fields as genuinely absent (vs. stale on failed poll), rejects negative values as parse error
+- Absent-vs-frozen semantics: named counters missing from successful poll become absent series; fields from failed poll cycles remain frozen at their last reported value (DESIGN.md §5.4)
+- Shared `technitium_collector_success` gauge across session and native collectors via `collectorSuccess` accessor
+- First golden exposition-text fixture (`test/fixtures/golden/native-lifetime-counters.txt`) for byte-for-byte metric serialization tests
+
+### Fixed
+
+- `SessionCollector` permission-transition logic now removes stale `technitium_collector_success` set-to-0 only once on permission restore, avoiding race with concurrent writes from native collector
+- Deduplicated error-reason classification via new shared `reasonOfError()` helper in `src/http/errors.ts`

@@ -19,3 +19,12 @@ export class TechnitiumHttpError extends Error {
     this.reason = reason;
   }
 }
+
+// Shared by every collector's own catch block: a TypeError surfacing here is
+// a malformed-body shape mismatch that slipped past a parser's own explicit
+// "parse" throws, so it belongs in "parse", not the catch-all "unknown".
+export function reasonOfError(error: unknown): PollErrorReason {
+  if (error instanceof TechnitiumHttpError) return error.reason;
+  if (error instanceof TypeError) return "parse";
+  return "unknown";
+}
