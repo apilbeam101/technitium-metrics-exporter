@@ -23,3 +23,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - JSON envelope classifier (`src/api/envelope.ts`) handling the HTTP-200-on-auth-failure quirk (DESIGN.md §3.2.1) and the flat-vs-wrapped shape difference between session/get and other endpoints
 - .NET timestamp parser (`src/api/time.ts`) handling the never-sentinel and UTC-default suffix-less timestamps
 - Test support: fake clock with event-loop simulation (`test/support/fake-clock.ts`), test-only self-signed TLS certificate and private key for exercising `http/agent.ts` TLS wiring
+- Session parser (`src/api/session.ts`) extracting version, node identity, domain, cluster-initialized flag, permission map, and cluster peer inventory (name/type/state/lastSeen)
+- State-set classification primitive (`src/metrics/state-set.ts`) for enum values (`absent`/`recognized`/`unrecognized`)
+- Session collector (`src/metrics/session-collector.ts`, `session-metrics.ts`) with `technitium_up` derived from actual call outcome, permission gating for disabled or permission-denied collectors, honest `up` set last on success and first on failure (N6), and stale cluster peer series cleared on failed cycles
+- Cluster peer inventory metrics (`technitium_cluster_node_state`, `technitium_cluster_node_last_seen_timestamp_seconds`, `technitium_cluster_nodes`) sourced from `session/get` without extra permission or call
+- Server info metrics (`technitium_server_version_info`, `technitium_server_version_supported`, `technitium_server_domain_info`) and cluster-initialized flag (`technitium_cluster_initialized`) from session preflight
+- Permission gating: one warning per collector on transition to skipped/failed state, `technitium_collector_success{collector}` set to 0 while gated/failing and removed (not 1) on permission restore

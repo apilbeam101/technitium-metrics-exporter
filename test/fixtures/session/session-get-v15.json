@@ -24,7 +24,27 @@
       "Logs": { "canView": false, "canModify": false, "canDelete": false },
       "Administration": { "canView": false, "canModify": false, "canDelete": false },
       "Settings": { "canView": false, "canModify": false, "canDelete": false }
-    }
+    },
+    "clusterNodes": [
+      { "name": "dns-a.example.com", "type": "Primary", "state": "Self" },
+      {
+        "name": "dns-b.example.com",
+        "type": "Secondary",
+        "state": "Connected",
+        "lastSeen": "2026-09-15T07:59:30.0000000Z",
+        "address": "192.0.2.12",
+        "url": "https://dns-b.example.com:53443/"
+      },
+      {
+        "name": "dns-c.example.com",
+        "type": "Secondary",
+        "state": "Unreachable",
+        "lastSeen": "2026-09-14T22:15:00.0000000Z",
+        "address": "192.0.2.13",
+        "url": "https://dns-c.example.com:53443/"
+      },
+      { "name": "dns-d.example.com", "type": "Secondary", "state": "Unknown" }
+    ]
   },
   "server": "dns-a",
   "status": "ok"

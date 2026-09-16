@@ -236,6 +236,11 @@ cluster-initialised flag, and permission map. For each **enabled** collector
 whose permission is absent: one loud warning, mark it skipped, and set
 `technitium_collector_success{collector} 0` — never retry-and-error every cycle.
 
+The version and node-identity fields this preflight already parses are
+exported directly as `technitium_server_version_info`,
+`technitium_server_version_supported`, and `technitium_server_domain_info`
+(D§5.1) — no separate collector or call needed.
+
 `session/get`'s own response also carries the cluster peer inventory whenever
 `clusterInitialized` is true (D§3.2.9), with no extra permission or call
 needed. This phase therefore also owns `technitium_cluster_node_state`,
