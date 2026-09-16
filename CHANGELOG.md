@@ -33,6 +33,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Absent-vs-frozen semantics: named counters missing from successful poll become absent series; fields from failed poll cycles remain frozen at their last reported value (DESIGN.md §5.4)
 - Shared `technitium_collector_success` gauge across session and native collectors via `collectorSuccess` accessor
 - First golden exposition-text fixture (`test/fixtures/golden/native-lifetime-counters.txt`) for byte-for-byte metric serialization tests
+- Zone domain type (`src/domain/zone.ts`) with bounded `ZONE_TYPES` and `DNSSEC_STATUSES` enumerations and presence-gating classifiers (`isSecondaryFamily`/`isPrimaryFamily`) for conditional field interpretation
+- Zone parser (`src/api/zones.ts`) that parses `/api/zones/list` response into `Zone[]`, normalizing `notifyFailedFor` to a count, reusing the shared .NET timestamp parser, and tolerating unknown fields
+- Zone metrics surface (`src/metrics/zone-metrics.ts`): `technitium_zone_soa_serial`, `technitium_zone_disabled`, `technitium_zone_last_modified_timestamp_seconds`, `technitium_zone_dnssec_status` (state set), `technitium_zone_expiry_timestamp_seconds`, `technitium_zone_expired`, `technitium_zone_sync_failed`, `technitium_zone_notify_failed`, `technitium_zone_notify_failed_peers`, `technitium_zones_visible`, `technitium_zones_by_type`, `technitium_zones_excluded_internal` — internal system zones excluded by default (controlled by `ZONES_INCLUDE_INTERNAL` config flag); failed poll clears zone inventory to genuinely absent rather than freezing it, since zone health is a live snapshot
+- Zone collector (`src/metrics/zone-collector.ts`) tying HTTP fetch, parse, and metric application together, sharing `collectorSuccess` and `unknownEnum` metrics with the session collector
+- Shared `AbsentUntilSetGauge` wrapper (`src/metrics/absent-gauge.ts`) for label-free gauges that must be genuinely absent (not zero) until they have a real value, extracted from duplicated private classes in native and session metrics
 
 ### Fixed
 

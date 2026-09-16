@@ -80,6 +80,14 @@ export class SessionCollector {
     return this.#metrics.collectorSuccess;
   }
 
+  // Exposed for the same reason as collectorSuccess above: zone-metrics.ts's
+  // unrecognized zone type/dnssecStatus values land in this same
+  // technitium_exporter_unknown_enum_total series this preflight's own
+  // cluster peer enum handling already writes to.
+  get unknownEnum(): SessionMetrics["unknownEnum"] {
+    return this.#metrics.unknownEnum;
+  }
+
   async collect(): Promise<SessionCollectResult> {
     let body: string;
     try {

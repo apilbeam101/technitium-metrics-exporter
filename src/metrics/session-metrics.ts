@@ -1,5 +1,6 @@
 import { Counter, Gauge, type Registry } from "@prometheus-io/client";
 import type { ClusterPeer, SessionInfo } from "../api/session.ts";
+import { AbsentUntilSetGauge } from "./absent-gauge.ts";
 import { classifyStateSetValue, type StateSetClassification } from "./state-set.ts";
 
 // D§3.4: v15.0.0 is the minimum supported server version. `info.version` is
@@ -58,36 +59,6 @@ const PERMISSION_SECTIONS = [
 const CLUSTER_PEER_STATES = ["Unknown", "Self", "Connected", "Unreachable"] as const;
 const CLUSTER_PEER_TYPES = ["Primary", "Secondary"] as const;
 
-// A Gauge with no label dimension always renders exactly one series once
-// constructed — reset() only zeroes its value, it cannot make the series
-// disappear, since there is no label combination to remove. technitium_-
-// cluster_nodes must be genuinely absent (not zero) for a non-clustered
-// target, same as its two labelled neighbours (D§5.6), so this wrapper
-// removes and recreates the underlying Gauge instead of resetting it.
-class ClusterNodeCountGauge {
-  readonly #registry: Registry;
-  readonly #name: string;
-  readonly #help: string;
-  #gauge: Gauge | undefined;
-
-  constructor(registry: Registry, name: string, help: string) {
-    this.#registry = registry;
-    this.#name = name;
-    this.#help = help;
-  }
-
-  set(value: number): void {
-    this.#gauge ??= new Gauge({ name: this.#name, help: this.#help, registers: [this.#registry] });
-    this.#gauge.set(value);
-  }
-
-  clear(): void {
-    if (this.#gauge === undefined) return;
-    this.#registry.removeSingleMetric(this.#name);
-    this.#gauge = undefined;
-  }
-}
-
 export interface SessionMetrics {
   readonly up: Gauge;
   readonly permissionGranted: Gauge<"section">;
@@ -95,7 +66,11 @@ export interface SessionMetrics {
   readonly collectorSuccess: Gauge<"collector">;
   readonly clusterNodeState: Gauge<"node_name" | "node_type" | "state">;
   readonly clusterNodeLastSeen: Gauge<"node_name">;
-  readonly clusterNodes: ClusterNodeCountGauge;
+  // technitium_cluster_nodes must be genuinely absent (not zero) for a
+  // non-clustered target, same as its two labelled neighbours above (D§5.6)
+  // — see absent-gauge.ts's AbsentUntilSetGauge for why a label-free Gauge
+  // needs its own wrapper to achieve that.
+  readonly clusterNodes: AbsentUntilSetGauge;
   readonly unknownEnum: Counter<"metric" | "value">;
   readonly serverVersionInfo: Gauge<"version">;
   readonly serverVersionSupported: Gauge;
@@ -144,7 +119,7 @@ export function createSessionMetrics(registry: Registry): SessionMetrics {
       labelNames: ["node_name"],
       registers,
     }),
-    clusterNodes: new ClusterNodeCountGauge(
+    clusterNodes: new AbsentUntilSetGauge(
       registry,
       "technitium_cluster_nodes",
       "Number of entries in the cluster peer inventory, including this node",

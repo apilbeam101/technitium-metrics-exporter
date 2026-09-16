@@ -1,5 +1,6 @@
 import { Counter, Gauge, type Registry } from "@prometheus-io/client";
 import type { CounterField, NativeLifetimeCounters } from "../api/native-text.ts";
+import { AbsentUntilSetGauge } from "./absent-gauge.ts";
 
 type GaugeField = "uptimeSeconds" | "startTimeSeconds";
 
@@ -82,10 +83,10 @@ function gaugeFields(): readonly GaugeField[] {
   return Object.keys(GAUGE_FIELD_SPECS) as GaugeField[];
 }
 
-// A label-free Counter/Gauge always renders exactly one series from the
-// moment it's constructed — reset()/set() cannot make it disappear, since
-// there's no label combination to remove (same problem session-metrics.ts's
-// ClusterNodeCountGauge solves for technitium_cluster_nodes). Each of these
+// A label-free Counter always renders exactly one series from the moment
+// it's constructed — reset()/inc() cannot make it disappear, since there's
+// no label combination to remove (same problem absent-gauge.ts's
+// AbsentUntilSetGauge solves for its own label-free gauges). Each of these
 // thirteen metrics must instead be genuinely absent until its field first
 // has a real value, and go absent again if a later successful poll no
 // longer reports that field (e.g. mid-migration to a renamed metric) —
@@ -129,37 +130,9 @@ class OptionalCounter {
   }
 }
 
-class OptionalGauge {
-  readonly #registry: Registry;
-  readonly #name: string;
-  readonly #help: string;
-  #gauge: Gauge | undefined;
-
-  constructor(registry: Registry, name: string, help: string) {
-    this.#registry = registry;
-    this.#name = name;
-    this.#help = help;
-  }
-
-  setOrClear(value: number | undefined): void {
-    if (value === undefined) {
-      this.#clear();
-      return;
-    }
-    this.#gauge ??= new Gauge({ name: this.#name, help: this.#help, registers: [this.#registry] });
-    this.#gauge.set(value);
-  }
-
-  #clear(): void {
-    if (this.#gauge === undefined) return;
-    this.#registry.removeSingleMetric(this.#name);
-    this.#gauge = undefined;
-  }
-}
-
 export interface NativeMetrics {
   readonly counters: Readonly<Record<CounterField, OptionalCounter>>;
-  readonly gauges: Readonly<Record<GaugeField, OptionalGauge>>;
+  readonly gauges: Readonly<Record<GaugeField, AbsentUntilSetGauge>>;
   readonly lifetimeCountersSupported: Gauge;
   readonly unknownNativeMetric: Counter<"name">;
   // Shared with session-metrics.ts's own Gauge instance (created once per
@@ -184,16 +157,16 @@ export function createNativeMetrics(
     counters[field] = new OptionalCounter(registry, spec.name, spec.help);
   }
 
-  const gauges = {} as Record<GaugeField, OptionalGauge>;
+  const gauges = {} as Record<GaugeField, AbsentUntilSetGauge>;
   for (const field of gaugeFields()) {
     const spec = GAUGE_FIELD_SPECS[field];
-    gauges[field] = new OptionalGauge(registry, spec.name, spec.help);
+    gauges[field] = new AbsentUntilSetGauge(registry, spec.name, spec.help);
   }
 
   return {
     counters,
     gauges,
-    // Deliberately eager, unlike the thirteen OptionalCounter/OptionalGauge
+    // Deliberately eager, unlike the thirteen OptionalCounter/AbsentUntilSetGauge
     // fields above: this is a health flag in the same category as
     // technitium_up and collectorSuccess, not a value with no honest
     // default. "Not yet successfully polled" is itself the correct 0, the

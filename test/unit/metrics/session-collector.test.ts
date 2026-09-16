@@ -244,6 +244,20 @@ describe("SessionCollector.collect", () => {
     assert.deepEqual(success, [{ value: 1, labels: { collector: "native" } }]);
   });
 
+  it("exposes the shared unknown_enum Counter so another collector can increment into the same series", async () => {
+    const registry = new Registry();
+    const c = collector(registry, stubClient(V15_CLUSTERED));
+
+    c.unknownEnum.inc({ metric: "zone_type", value: "FutureZoneType" });
+
+    const metrics = await registry.getMetricsAsJSON();
+    const unknownEnum =
+      metrics.find((m) => m.name === "technitium_exporter_unknown_enum_total")?.values ?? [];
+    assert.deepEqual(unknownEnum, [
+      { value: 1, labels: { metric: "zone_type", value: "FutureZoneType" } },
+    ]);
+  });
+
   it("never removes another collector's own collector_success value on a later cycle where permission is still granted", async () => {
     const registry = new Registry();
     const c = collector(registry, stubClient(V15_CLUSTERED), { enabledCollectors: ["native"] });

@@ -47,7 +47,7 @@ src/
   domain/
     target.ts  snapshot.ts  session.ts  zone.ts  stats.ts  cluster.ts
   metrics/
-    registry.ts  state-set.ts  self.ts
+    registry.ts  state-set.ts  absent-gauge.ts  self.ts
     session-metrics.ts   session-collector.ts
     native-metrics.ts    native-collector.ts
     zone-metrics.ts      zone-collector.ts
@@ -132,6 +132,16 @@ interpretation of suffix-less values, and tolerance of seven fractional digits.
 Pure enum classification returning `{ kind: 'absent' | 'recognized' |
 'unrecognized' }`. The caller owns the unknown-value counter, which keeps the
 primitive free of metric dependencies and therefore trivially testable.
+
+### `metrics/absent-gauge.ts`
+
+A label-free-gauge wrapper (`set`/`clear`/`setOrClear`) that removes and
+recreates the underlying `Gauge` instead of resetting it, since `reset()`
+alone can only zero a label-free gauge's value and can never make its one
+series disappear. Shared by every metric that must be genuinely absent until
+it first has a real value and absent again once that value stops applying
+(`technitium_cluster_nodes`, the native lifetime-counter gauge fields,
+`technitium_zones_visible`/`technitium_zones_excluded_internal`).
 
 ### `poller/refresh-cache.ts`
 
@@ -288,15 +298,23 @@ fields is genuinely absent, not present-and-zero.
 The core deliverable: R1 through R4.
 
 `api/zones.ts`, `domain/zone.ts`, `metrics/zone-metrics.ts`,
-`zone-collector.ts`.
+`zone-collector.ts`. Also extracts `metrics/absent-gauge.ts` out of
+`native-metrics.ts` and `session-metrics.ts`'s own copies of the same
+label-free-gauge wrapper, once zone-metrics.ts needed a third.
 
-Zone-family classification — primary-family versus secondary-family —
-determines which conditional metrics exist at all. Internal-zone filter keyed
-on `internal === true` — the field is absent, not `false`, on every ordinary
-zone (D§3.2.7) — with an exported excluded count. State-set rendering for
-`dnssecStatus`. `notifyFailedFor` reduced to a count. The parser tolerates and
-ignores fields outside this design's metric surface (e.g. `catalog`) rather
-than failing on them.
+Which conditional metrics exist at all is decided once, at the parse boundary
+(`api/zones.ts`): each conditional field is carried through as `undefined` or
+a real value exactly as the upstream response reports it per zone family
+(D§3.2.7), and the metrics layer gates purely on that presence rather than
+re-deriving zone-family membership itself. `domain/zone.ts`'s
+`isSecondaryFamily`/`isPrimaryFamily` classifiers document which types belong
+to which family and are exercised directly against the fixture, but are not
+consulted by the render path. Internal-zone filter keyed on `internal ===
+true` — the field is absent, not `false`, on every ordinary zone (D§3.2.7) —
+with an exported excluded count. State-set rendering for `dnssecStatus`.
+`notifyFailedFor` reduced to a count. The parser tolerates and ignores fields
+outside this design's metric surface (e.g. `catalog`) rather than failing on
+them.
 
 **Exit:** tests for all seven zone types; conditional fields absent rather than
 zero; a zone removed between two renders disappears from the output;
