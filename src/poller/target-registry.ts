@@ -6,16 +6,17 @@ import type { Clock } from "../http/clock.ts";
 import { ClusterCollector } from "../metrics/cluster-collector.ts";
 import { NativeCollector } from "../metrics/native-collector.ts";
 import { SessionCollector } from "../metrics/session-collector.ts";
+import { StatsCollector } from "../metrics/stats-collector.ts";
 import { ZoneCollector } from "../metrics/zone-collector.ts";
 import { PollCycleTracker } from "./cache.ts";
 import { TargetPoller } from "./target-poller.ts";
 
-// These three enabled-here collectors' own required permission sections
+// These four enabled-here collectors' own required permission sections
 // (session-collector.ts's internal COLLECTOR_PERMISSION_REQUIREMENTS table
-// isn't exported, so this mirrors those rows of it — deliberately not
-// "stats", whose collector doesn't exist until Phase 9).
+// isn't exported, so this mirrors those rows of it).
 const NATIVE_PERMISSION_SECTION = "Dashboard";
 const ZONES_PERMISSION_SECTION = "Zones";
+const STATS_PERMISSION_SECTION = "Dashboard";
 const CLUSTER_PERMISSION_SECTION = "Administration";
 
 function defaultHttpClient(target: TargetConfig, config: AppConfig, clock: Clock): HttpClient {
@@ -55,6 +56,7 @@ export interface CycleSummary {
   readonly session: "success" | "failure";
   readonly native: "success" | "failure" | "skipped";
   readonly zones: "success" | "failure" | "skipped";
+  readonly stats: "success" | "failure" | "skipped";
   readonly cluster: "success" | "failure" | "skipped";
 }
 
@@ -71,6 +73,9 @@ export interface TargetCollectors {
   };
   readonly native: Pick<NativeCollector, "collect">;
   readonly zones: Pick<ZoneCollector, "collect">;
+  // Absent when ENABLE_STATS_COLLECTOR is off (D§4.2's default), unlike
+  // native/zones, which have no such opt-out flag.
+  readonly stats?: Pick<StatsCollector, "collect"> | undefined;
   // Absent when ENABLE_CLUSTER_COLLECTOR is off (D§4.2's default), unlike
   // native/zones, which have no such opt-out flag.
   readonly cluster?: Pick<ClusterCollector, "collect" | "notClustered"> | undefined;
@@ -93,11 +98,12 @@ export interface TargetCycleResult {
 // native/zones never get a chance to try — their own success series must
 // read 0 too rather than freezing at whatever they last reported (N6).
 export async function runTargetCycle(collectors: TargetCollectors): Promise<TargetCycleResult> {
-  const { session, native, zones, cluster } = collectors;
+  const { session, native, zones, stats, cluster } = collectors;
   const sessionResult = await session.collect();
 
   let nativeOutcome: CycleSummary["native"] = "skipped";
   let zoneOutcome: CycleSummary["zones"] = "skipped";
+  let statsOutcome: CycleSummary["stats"] = "skipped";
   let clusterOutcome: CycleSummary["cluster"] = "skipped";
   let hadParseError = sessionResult.kind === "failure" && sessionResult.reason === "parse";
 
@@ -119,6 +125,22 @@ export async function runTargetCycle(collectors: TargetCollectors): Promise<Targ
         zones.collect().then((result) => {
           zoneOutcome = result.kind;
           if (result.kind === "failure" && result.reason === "parse") hadParseError = true;
+        }),
+      );
+    }
+
+    if (stats !== undefined && permissions[STATS_PERMISSION_SECTION]?.canView) {
+      tasks.push(
+        stats.collect().then((result) => {
+          statsOutcome = result.kind;
+          // Only a fresh attempt's own parse failure counts once — an
+          // off-cadence cycle just restates the last real attempt's outcome
+          // and must not re-trigger hadParseError on every such cycle until
+          // the next actual fetch (D§5.7), the same reason cluster's own
+          // handling below checks result.fresh.
+          if (result.fresh && result.kind === "failure" && result.reason === "parse") {
+            hadParseError = true;
+          }
         }),
       );
     }
@@ -161,6 +183,7 @@ export async function runTargetCycle(collectors: TargetCollectors): Promise<Targ
   } else {
     session.collectorSuccess.labels({ collector: "native" }).set(0);
     session.collectorSuccess.labels({ collector: "zones" }).set(0);
+    if (stats !== undefined) session.collectorSuccess.labels({ collector: "stats" }).set(0);
     if (cluster !== undefined) session.collectorSuccess.labels({ collector: "cluster" }).set(0);
   }
 
@@ -169,6 +192,7 @@ export async function runTargetCycle(collectors: TargetCollectors): Promise<Targ
       session: sessionResult.kind,
       native: nativeOutcome,
       zones: zoneOutcome,
+      stats: statsOutcome,
       cluster: clusterOutcome,
     },
     hadParseError,
@@ -248,12 +272,14 @@ function buildEntry(
   const registry = new Registry();
   const httpClient = createHttpClient(target);
 
+  const enabledCollectors: string[] = ["native", "zones"];
+  if (config.enableStatsCollector) enabledCollectors.push("stats");
+  if (config.enableClusterCollector) enabledCollectors.push("cluster");
+
   const session = new SessionCollector({
     httpClient,
     registry,
-    enabledCollectors: config.enableClusterCollector
-      ? ["native", "zones", "cluster"]
-      : ["native", "zones"],
+    enabledCollectors,
     warn: (message) => options.warn(target.name, message),
   });
   const native = new NativeCollector({
@@ -268,6 +294,18 @@ function buildEntry(
     unknownEnum: session.unknownEnum,
     includeInternal: config.zonesIncludeInternal,
   });
+  const stats = config.enableStatsCollector
+    ? new StatsCollector({
+        httpClient,
+        registry,
+        collectorSuccess: session.collectorSuccess,
+        unknownEnum: session.unknownEnum,
+        includeQueryTypes: config.enableStatsQueryTypes,
+        clock: options.clock,
+        intervalMs: config.statsPollIntervalSeconds * 1000,
+        warn: (message) => options.warn(target.name, message),
+      })
+    : undefined;
   const cluster = config.enableClusterCollector
     ? new ClusterCollector({
         httpClient,
@@ -282,7 +320,13 @@ function buildEntry(
   const pollTracker = new PollCycleTracker<CycleSummary>();
 
   const runCycle = async (): Promise<void> => {
-    const { summary, hadParseError } = await runTargetCycle({ session, native, zones, cluster });
+    const { summary, hadParseError } = await runTargetCycle({
+      session,
+      native,
+      zones,
+      stats,
+      cluster,
+    });
     // Monotonic, per IMPLEMENTATION.md's "Shared primitives": clock.now()
     // (Date.now()) would step backwards or jump under an NTP correction,
     // fabricating a negative or bogus cache age once Phase 10 exposes this.

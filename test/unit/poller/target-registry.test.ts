@@ -19,6 +19,7 @@ const INVALID_TOKEN = readFileSync("test/fixtures/session/envelope-invalid-token
 const NATIVE_CURRENT = readFileSync("test/fixtures/native/metrics-text-current-names.txt", "utf8");
 const ZONES_LIST = readFileSync("test/fixtures/zones/zones-list.json", "utf8");
 const CLUSTER_STATE = readFileSync("test/fixtures/cluster/cluster-state.json", "utf8");
+const STATS_FULL = readFileSync("test/fixtures/stats/stats-get-full.json", "utf8");
 
 // SESSION_V15_CLUSTERED's own fixture token has Administration: View denied
 // (it's the fixture native/zones tests already share), so the
@@ -475,6 +476,126 @@ describe("TargetRegistry", () => {
     await entry.runCycle();
 
     assert.equal(entry.pollTracker.parseErrorCycles, 1);
+  });
+
+  it("runs the stats collector when enabled and Dashboard: View is granted", async () => {
+    const registry = new TargetRegistry(
+      baseConfig([target("dns-a")], { enableStatsCollector: true }),
+      {
+        clock: new FakeClock(),
+        warn: () => {},
+        createHttpClient: () =>
+          routedClient({
+            "/api/user/session/get": SESSION_V15_CLUSTERED,
+            "/api/dashboard/metrics/text": NATIVE_CURRENT,
+            "/api/zones/list": ZONES_LIST,
+            "/api/dashboard/stats/get": STATS_FULL,
+          }),
+      },
+    );
+
+    const entry = mustGet(registry, "dns-a");
+    await entry.runCycle();
+
+    assert.equal(await metricValue(entry.registry, "technitium_zones_reported"), 11);
+    const metrics = (await entry.registry.getMetricsAsJSON()) as Array<{
+      name: string;
+      values: Array<{ value: number; labels: Record<string, string> }>;
+    }>;
+    const success = metrics.find((m) => m.name === "technitium_collector_success")?.values ?? [];
+    assert.ok(success.some((v) => v.labels.collector === "stats" && v.value === 1));
+  });
+
+  it("never registers a stats collector_success series when ENABLE_STATS_COLLECTOR is off", async () => {
+    const registry = new TargetRegistry(baseConfig([target("dns-a")]), {
+      clock: new FakeClock(),
+      warn: () => {},
+      createHttpClient: () =>
+        routedClient({
+          "/api/user/session/get": SESSION_V15_CLUSTERED,
+          "/api/dashboard/metrics/text": NATIVE_CURRENT,
+          "/api/zones/list": ZONES_LIST,
+        }),
+    });
+
+    const entry = mustGet(registry, "dns-a");
+    await entry.runCycle();
+
+    const metrics = (await entry.registry.getMetricsAsJSON()) as Array<{
+      name: string;
+      values: Array<{ value: number; labels: Record<string, string> }>;
+    }>;
+    const success = metrics.find((m) => m.name === "technitium_collector_success")?.values ?? [];
+    assert.equal(
+      success.some((v) => v.labels.collector === "stats"),
+      false,
+    );
+  });
+
+  it("auto-skips the stats collector when Dashboard: View is absent, without ever calling stats/get", async () => {
+    const warnings: string[] = [];
+    const raw = JSON.parse(SESSION_V15_CLUSTERED) as {
+      info: { permissions: Record<string, { canView: boolean }> };
+    };
+    raw.info.permissions.Dashboard = { canView: false };
+    const noDashboard = JSON.stringify(raw);
+
+    const client = trackedRoutedClient({
+      "/api/user/session/get": noDashboard,
+      "/api/zones/list": ZONES_LIST,
+    });
+    const registry = new TargetRegistry(
+      baseConfig([target("dns-a")], { enableStatsCollector: true }),
+      {
+        clock: new FakeClock(),
+        warn: (_targetName, message) => warnings.push(message),
+        createHttpClient: () => client,
+      },
+    );
+
+    const entry = mustGet(registry, "dns-a");
+    await entry.runCycle();
+
+    assert.equal(client.callsFor("/api/dashboard/stats/get"), 0);
+    assert.ok(warnings.some((w) => /stats.*Dashboard/.test(w)));
+
+    const metrics = (await entry.registry.getMetricsAsJSON()) as Array<{
+      name: string;
+      values: Array<{ value: number; labels: Record<string, string> }>;
+    }>;
+    const success = metrics.find((m) => m.name === "technitium_collector_success")?.values ?? [];
+    assert.deepEqual(
+      success.find((v) => v.labels.collector === "stats"),
+      { value: 0, labels: { collector: "stats" } },
+    );
+  });
+
+  it("exports the query-type split when both ENABLE_STATS_COLLECTOR and ENABLE_STATS_QUERY_TYPES are on", async () => {
+    const registry = new TargetRegistry(
+      baseConfig([target("dns-a")], { enableStatsCollector: true, enableStatsQueryTypes: true }),
+      {
+        clock: new FakeClock(),
+        warn: () => {},
+        createHttpClient: () =>
+          routedClient({
+            "/api/user/session/get": SESSION_V15_CLUSTERED,
+            "/api/dashboard/metrics/text": NATIVE_CURRENT,
+            "/api/zones/list": ZONES_LIST,
+            "/api/dashboard/stats/get": STATS_FULL,
+          }),
+      },
+    );
+
+    const entry = mustGet(registry, "dns-a");
+    await entry.runCycle();
+
+    const metrics = (await entry.registry.getMetricsAsJSON()) as Array<{
+      name: string;
+      values: Array<{ value: number; labels: Record<string, string> }>;
+    }>;
+    const values =
+      metrics.find((m) => m.name === "technitium_stats_window_queries_by_type")?.values ?? [];
+    assert.ok(values.length > 0);
   });
 
   it("records fetchedAt from the monotonic clock, not wall time", async () => {
