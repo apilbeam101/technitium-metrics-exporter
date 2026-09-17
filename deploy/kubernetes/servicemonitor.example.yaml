@@ -1,0 +1,46 @@
+# Optional. Only apply this if the Prometheus Operator's CRDs are already
+# installed in the cluster — applying it where they are not fails outright.
+# See docs/INSTALL_KUBERNETES.md for the plain scrape_configs alternative,
+# which needs no CRD and should be preferred when the Operator isn't in use.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: technitium-metrics-exporter
+  labels:
+    app.kubernetes.io/name: technitium-metrics-exporter
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: technitium-metrics-exporter
+  # One endpoint per configured target, each pinned to that target's own
+  # ?target= value and its own instance label — mirroring the relabeling in
+  # the plain scrape_configs snippet, since ServiceMonitor has no equivalent
+  # of that snippet's single static_configs list covering every target. The
+  # job relabeling on each endpoint overrides the Operator's own default of
+  # deriving `job` from the Service name, so it matches docs/DESIGN.md §7's
+  # alert rules, which are written against job="technitium".
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: 30s
+      params:
+        target: ["dns-a"]
+      relabelings:
+        - action: replace
+          replacement: dns-a
+          targetLabel: instance
+        - action: replace
+          replacement: technitium
+          targetLabel: job
+    - port: metrics
+      path: /metrics
+      interval: 30s
+      params:
+        target: ["dns-b"]
+      relabelings:
+        - action: replace
+          replacement: dns-b
+          targetLabel: instance
+        - action: replace
+          replacement: technitium
+          targetLabel: job

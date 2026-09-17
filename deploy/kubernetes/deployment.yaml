@@ -1,0 +1,76 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: technitium-metrics-exporter
+  labels:
+    app.kubernetes.io/name: technitium-metrics-exporter
+spec:
+  replicas: 1
+  # Recreate, not RollingUpdate: two replicas would double-poll every DNS
+  # node for no benefit, since each replica renders every target's series
+  # itself. A brief scrape gap during a restart is preferable to that.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: technitium-metrics-exporter
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: technitium-metrics-exporter
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: technitium-metrics-exporter
+          image: technitium-metrics-exporter:latest
+          # IfNotPresent even against the "latest" tag above, so a locally
+          # built/side-loaded image (kind, minikube) is used as-is instead of
+          # Kubernetes' own default of Always for that tag, which would
+          # otherwise try (and fail) to pull it from a registry.
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: metrics
+              containerPort: 10053
+          envFrom:
+            - configMapRef:
+                name: technitium-metrics-exporter-config
+            - secretRef:
+                name: technitium-metrics-exporter-secrets
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          # Both probes assume a plain HTTP metrics listener. If
+          # METRICS_TLS_CERT_PATH is configured, add `scheme: HTTPS` to both
+          # httpGet blocks — kubelet accepts a self-signed/unverified server
+          # certificate for probes regardless, so no CA needs mounting here.
+          # mTLS (METRICS_TLS_CLIENT_CA_PATH) additionally requires the
+          # listener to authenticate the caller, which kubelet's probe client
+          # cannot do — leave mTLS off the metrics listener if using these
+          # probes, or move health monitoring outside the cluster.
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: metrics
+            initialDelaySeconds: 5
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: metrics
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 256Mi

@@ -1,0 +1,50 @@
+# Adjust the podSelector under ingress.from to match your Prometheus (or
+# Prometheus Operator) pods, and the port(s) under egress.to to match the
+# DNS nodes' actual web service port(s) — 53443 here is this project's own
+# documentation placeholder, not a real default.
+#
+# A bare podSelector under ingress.from (with no namespaceSelector alongside
+# it) only matches pods in this NetworkPolicy's own namespace. If Prometheus
+# runs in a different namespace — commonly "monitoring" — add a
+# namespaceSelector matching that namespace's own label next to the
+# podSelector below, or the scrape traffic is silently dropped.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: technitium-metrics-exporter
+  labels:
+    app.kubernetes.io/name: technitium-metrics-exporter
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: technitium-metrics-exporter
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus
+          # namespaceSelector:
+          #   matchLabels:
+          #     kubernetes.io/metadata.name: monitoring
+      ports:
+        - protocol: TCP
+          port: 10053
+  egress:
+    # Cluster DNS: needed to resolve the DNS nodes' hostnames from
+    # TECHNITIUM_TARGETS before the TLS connection below can even be made.
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    - to:
+        - ipBlock:
+            cidr: 192.0.2.0/24
+      ports:
+        - protocol: TCP
+          port: 53443

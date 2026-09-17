@@ -37,9 +37,11 @@ curl -s localhost:10053/healthz
 curl -s "localhost:10053/metrics?target=<name>"
 ```
 
-Full install instructions for standalone, Docker and Kubernetes deployments
-will land in `docs/INSTALL_*.md` as those phases are built (see
-[docs/IMPLEMENTATION.md](docs/IMPLEMENTATION.md)).
+Full install instructions:
+
+- [docs/INSTALL_STANDALONE.md](docs/INSTALL_STANDALONE.md)
+- [docs/INSTALL_DOCKER.md](docs/INSTALL_DOCKER.md)
+- [docs/INSTALL_KUBERNETES.md](docs/INSTALL_KUBERNETES.md)
 
 ## Documentation
 

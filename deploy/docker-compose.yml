@@ -1,0 +1,21 @@
+services:
+  technitium-metrics-exporter:
+    build: ..
+    image: technitium-metrics-exporter:latest
+    restart: unless-stopped
+    env_file:
+      - ../.env
+    ports:
+      # Update this if METRICS_PORT in .env is changed from the default:
+      # Compose's own `${VAR}` interpolation reads a .env file next to this
+      # compose file (deploy/.env), not the env_file: entry above (../.env),
+      # so it cannot be kept in lockstep automatically here.
+      - "10053:10053"
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    # No explicit healthcheck block here: Compose falls back to the image's
+    # own Dockerfile HEALTHCHECK, so there's one definition to keep in sync
+    # rather than two.

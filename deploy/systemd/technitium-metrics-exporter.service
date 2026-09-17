@@ -1,0 +1,45 @@
+[Unit]
+Description=Technitium DNS Server Prometheus exporter
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/node /opt/technitium-metrics-exporter/dist/index.js
+WorkingDirectory=/opt/technitium-metrics-exporter
+EnvironmentFile=/opt/technitium-metrics-exporter/.env
+Restart=on-failure
+RestartSec=5s
+
+# No dedicated system user needs to be created ahead of time: systemd
+# allocates one dynamically for the unit's lifetime and tears it down after.
+DynamicUser=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+NoNewPrivileges=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+# EPERM, not systemd's default SIGSYS-kill, for a syscall outside
+# @system-service: Node's libuv probes io_uring and falls back to its
+# threadpool on failure, which needs the probe to fail with an error, not
+# for the process to be killed outright — verify this against a real host
+# before relying on it (io_uring's presence in @system-service is
+# systemd-version-dependent).
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target

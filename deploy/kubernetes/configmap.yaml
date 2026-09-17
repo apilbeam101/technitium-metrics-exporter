@@ -1,0 +1,24 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: technitium-metrics-exporter-config
+  labels:
+    app.kubernetes.io/name: technitium-metrics-exporter
+data:
+  # Comma-separated name=baseUrl pairs; see docs/DESIGN.md §6.1. Names must
+  # match the per-target override suffix convention used below and in
+  # secret.example.yaml (upper-cased, "-" replaced with "_").
+  TECHNITIUM_TARGETS: "dns-a=https://dns-a.example.com:53443,dns-b=https://dns-b.example.com:53443"
+  METRICS_PORT: "10053"
+  METRICS_BIND_ADDRESS: "0.0.0.0"
+  POLL_INTERVAL_SECONDS: "30"
+  CLUSTER_POLL_INTERVAL_SECONDS: "60"
+  STATS_POLL_INTERVAL_SECONDS: "300"
+  REQUEST_TIMEOUT_SECONDS: "15"
+  ENABLE_CLUSTER_COLLECTOR: "false"
+  ENABLE_STATS_COLLECTOR: "false"
+  ENABLE_STATS_QUERY_TYPES: "false"
+  ZONES_INCLUDE_INTERNAL: "false"
+  ENABLE_DEFAULT_METRICS: "true"
+  LOG_LEVEL: "info"
+  LOG_FORMAT: "json"
