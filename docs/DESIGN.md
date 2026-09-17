@@ -751,6 +751,17 @@ CRD and applying that manifest there fails.
    function defensively, but no capture has shown it doing so. Confirm during
    Phase 14 live validation and update [§5.6](#56-cluster) once known either
    way.
+5. **`TechnitiumZoneVisibilityMismatch`'s two sides are on different scopes.**
+   `technitium_zones_visible` excludes internal system zones whenever
+   `ZONES_INCLUDE_INTERNAL` is left at its default of `false`, while
+   `technitium_zones_reported` is the server's own unfiltered total
+   ([§5.3](#53-detecting-a-token-that-cannot-see-every-zone)); this project's
+   own fixtures (14 visible zones, 4 of them internal, against 11 reported)
+   demonstrate the shipped rule firing with a fully-permissioned token.
+   Resolve before Phase 14 live validation, either by subtracting
+   `technitium_zones_excluded_internal` from the visible side of the
+   comparison or by scoping the rule to `ZONES_INCLUDE_INTERNAL=true`
+   deployments only.
 
 ---
 

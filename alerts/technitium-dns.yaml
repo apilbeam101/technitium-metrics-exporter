@@ -1,0 +1,150 @@
+groups:
+  - name: technitium-dns
+    rules:
+      - alert: TechnitiumExporterAbsent
+        expr: up{job="technitium"} == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Technitium exporter target {{ $labels.instance }} is unreachable"
+          description: "Prometheus has not been able to scrape {{ $labels.instance }} for 5 minutes. Every technitium_* series for this target has stopped existing, not just gone stale, so no other rule in this file can fire for it."
+
+      - alert: TechnitiumNodeDown
+        expr: technitium_up == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Technitium node {{ $labels.instance }} rejected the last poll"
+          description: "The exporter reached {{ $labels.instance }} but the last poll cycle did not reach the DNS node or its session token was not accepted, for 5 minutes."
+
+      - alert: TechnitiumCollectorFailing
+        expr: technitium_collector_success == 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Technitium collector {{ $labels.collector }} failing on {{ $labels.instance }}"
+          description: "The {{ $labels.collector }} collector for {{ $labels.instance }} has stayed unsuccessful for 10 minutes: either its last poll attempt failed, or its API token is missing the permission the collector needs, in which case it has never run at all. Either way the metrics it owns are stale or absent."
+
+      # Requires the job label this project's own install guides use
+      # (job_name: technitium); aggregating by zone alone across unrelated
+      # Prometheus jobs, or across per-node internal zones when
+      # ZONES_INCLUDE_INTERNAL=true, would compare unrelated serials.
+      - alert: TechnitiumZoneSerialDivergence
+        expr: max by (zone) (technitium_zone_soa_serial{job="technitium"}) != min by (zone) (technitium_zone_soa_serial{job="technitium"})
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "SOA serial divergence for zone {{ $labels.zone }}"
+          description: "Zone {{ $labels.zone }} does not report the same SOA serial on every polled node for 10 minutes, meaning at least one node is serving stale zone data."
+
+      - alert: TechnitiumZoneTransferStale
+        expr: technitium_zone_expiry_timestamp_seconds - time() < 86400
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Secondary zone {{ $labels.zone }} nearing SOA expiry on {{ $labels.instance }}"
+          description: "Zone {{ $labels.zone }} on {{ $labels.instance }} is within 24 hours of its SOA expire with no successful transfer since. Tune the 86400-second threshold to a fraction of this zone's own SOA expire interval if it differs materially from the default."
+
+      - alert: TechnitiumZoneSyncFailed
+        expr: technitium_zone_sync_failed == 1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Zone {{ $labels.zone }} transfer failing on {{ $labels.instance }}"
+          description: "The last transfer attempt for secondary zone {{ $labels.zone }} on {{ $labels.instance }} failed, and has stayed failed for 10 minutes."
+
+      - alert: TechnitiumZoneNotifyFailed
+        expr: technitium_zone_notify_failed == 1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Zone {{ $labels.zone }} failing to notify secondaries from {{ $labels.instance }}"
+          description: "Primary zone {{ $labels.zone }} on {{ $labels.instance }} has failed to notify at least one secondary for 10 minutes; see technitium_zone_notify_failed_peers for the count."
+
+      - alert: TechnitiumZoneExpired
+        expr: technitium_zone_expired == 1
+        for: 0m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Zone {{ $labels.zone }} has expired on {{ $labels.instance }}"
+          description: "Secondary zone {{ $labels.zone }} on {{ $labels.instance }} has passed its SOA expire with no successful transfer and is no longer authoritative for answers."
+
+      - alert: TechnitiumZoneDisabled
+        expr: technitium_zone_disabled == 1
+        for: 15m
+        labels:
+          severity: info
+        annotations:
+          summary: "Zone {{ $labels.zone }} is disabled on {{ $labels.instance }}"
+          description: "Zone {{ $labels.zone }} on {{ $labels.instance }} has been disabled for 15 minutes. Informational unless this zone is expected to be serving."
+
+      # technitium_zones_reported only exists once the opt-in stats collector
+      # is enabled (ENABLE_STATS_COLLECTOR=true); this rule is structurally
+      # unalertable on a deployment that leaves it at its default off. Also
+      # requires the job="technitium" scrape job name; a differently-named
+      # job silently disables this rule rather than erroring.
+      - alert: TechnitiumZoneVisibilityMismatch
+        expr: technitium_zones_visible{job="technitium"} != technitium_zones_reported{job="technitium"}
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Zone visibility mismatch on {{ $labels.instance }}"
+          description: "{{ $labels.instance }}'s API token can see a different zone count than the server reports owning, for 10 minutes, meaning the configured token cannot view every zone and per-zone metrics are incomplete."
+
+      # technitium_cluster_node_state only exists once the opt-in cluster
+      # collector is enabled (ENABLE_CLUSTER_COLLECTOR=true); this rule and
+      # the one below are structurally unalertable on a deployment that
+      # leaves it at its default off.
+      - alert: TechnitiumClusterNodeUnreachable
+        expr: technitium_cluster_node_state{state="Unreachable"} == 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Cluster peer {{ $labels.node_name }} unreachable from {{ $labels.instance }}"
+          description: "{{ $labels.instance }} has reported cluster peer {{ $labels.node_name }} as Unreachable for 5 minutes."
+
+      - alert: TechnitiumClusterNodeStateUnknown
+        expr: technitium_cluster_node_state{state="Unknown"} == 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Cluster peer {{ $labels.node_name }} state unknown from {{ $labels.instance }}"
+          description: "{{ $labels.instance }} has reported cluster peer {{ $labels.node_name }} in an Unknown connection state for 5 minutes."
+
+      - alert: TechnitiumServerVersionUnsupported
+        expr: technitium_server_version_supported == 0
+        for: 30m
+        labels:
+          severity: info
+        annotations:
+          summary: "Technitium server version unsupported on {{ $labels.instance }}"
+          description: "{{ $labels.instance }} is running a Technitium server version this exporter does not recognize as supported. See technitium_server_version_info for the reported version."
+
+      - alert: TechnitiumStaleData
+        expr: technitium_exporter_cache_age_seconds > 300
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Technitium cache stale for {{ $labels.instance }}"
+          description: "{{ $labels.instance }}'s cached poll result is over 300 seconds old (10x the default 30-second poll interval), for 5 minutes. Scrapes are returning stale data even though the target itself is up. Tune the threshold if this target's poll interval is configured higher than the default."
+
+      - alert: TechnitiumCardinalityGrowth
+        expr: technitium_exporter_series > 5000
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Technitium series count high for {{ $labels.instance }}"
+          description: "{{ $labels.instance }}'s registry has rendered more than 5000 series for 15 minutes, most often from zone count growth. Tune this ceiling to the deployment's own expected zone and cluster-peer inventory."

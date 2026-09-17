@@ -29,7 +29,8 @@
     "check:license-compound": "node --experimental-strip-types scripts/check-license-compound.ts",
     "check:fixtures": "node --experimental-strip-types scripts/sanitize-fixtures.ts --check test/fixtures",
     "check": "npm run check:native-addons && npm run check:pack-allowlist && npm run check:license-compound && npm run check:fixtures",
-    "generate:metrics-doc": "node --experimental-strip-types scripts/generate-metrics-doc.ts"
+    "generate:metrics-doc": "node --experimental-strip-types scripts/generate-metrics-doc.ts",
+    "generate:dashboard": "node --experimental-strip-types scripts/generate-dashboard.ts"
   },
   "dependencies": {
     "@prometheus-io/client": "^0.16.1",

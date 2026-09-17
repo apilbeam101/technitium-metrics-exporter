@@ -1,0 +1,355 @@
+rule_files:
+  - technitium-dns.yaml
+
+evaluation_interval: 1m
+
+tests:
+  # TechnitiumExporterAbsent: up{job="technitium"} == 0, for: 5m
+  - interval: 1m
+    input_series:
+      - series: 'up{job="technitium", instance="dns-a:10053"}'
+        values: "1 1 1 0 0 0 0 0 0"
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: TechnitiumExporterAbsent
+        exp_alerts: []
+      - eval_time: 7m
+        alertname: TechnitiumExporterAbsent
+        exp_alerts: []
+      - eval_time: 8m
+        alertname: TechnitiumExporterAbsent
+        exp_alerts:
+          - exp_labels:
+              job: technitium
+              instance: "dns-a:10053"
+              severity: critical
+            exp_annotations:
+              summary: "Technitium exporter target dns-a:10053 is unreachable"
+              description: "Prometheus has not been able to scrape dns-a:10053 for 5 minutes. Every technitium_* series for this target has stopped existing, not just gone stale, so no other rule in this file can fire for it."
+
+  # TechnitiumNodeDown: technitium_up == 0, for: 5m
+  - interval: 1m
+    input_series:
+      - series: 'technitium_up{instance="dns-a:10053"}'
+        values: "1 1 1 0 0 0 0 0 0"
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: TechnitiumNodeDown
+        exp_alerts: []
+      - eval_time: 7m
+        alertname: TechnitiumNodeDown
+        exp_alerts: []
+      - eval_time: 8m
+        alertname: TechnitiumNodeDown
+        exp_alerts:
+          - exp_labels:
+              instance: "dns-a:10053"
+              severity: critical
+            exp_annotations:
+              summary: "Technitium node dns-a:10053 rejected the last poll"
+              description: "The exporter reached dns-a:10053 but the last poll cycle did not reach the DNS node or its session token was not accepted, for 5 minutes."
+
+  # TechnitiumCollectorFailing: technitium_collector_success == 0, for: 10m
+  - interval: 1m
+    input_series:
+      - series: 'technitium_collector_success{instance="dns-a:10053", collector="zones"}'
+        values: "1 1 1 0 0 0 0 0 0 0 0 0 0 0"
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: TechnitiumCollectorFailing
+        exp_alerts: []
+      - eval_time: 12m
+        alertname: TechnitiumCollectorFailing
+        exp_alerts: []
+      - eval_time: 13m
+        alertname: TechnitiumCollectorFailing
+        exp_alerts:
+          - exp_labels:
+              instance: "dns-a:10053"
+              collector: zones
+              severity: warning
+            exp_annotations:
+              summary: "Technitium collector zones failing on dns-a:10053"
+              description: "The zones collector for dns-a:10053 has stayed unsuccessful for 10 minutes: either its last poll attempt failed, or its API token is missing the permission the collector needs, in which case it has never run at all. Either way the metrics it owns are stale or absent."
+
+  # TechnitiumZoneSerialDivergence: max by (zone) (...{job="technitium"}) != min by (zone) (...{job="technitium"}), for: 10m
+  - interval: 1m
+    input_series:
+      - series: 'technitium_zone_soa_serial{job="technitium", instance="dns-a", zone="example.com", type="Primary"}'
+        values: "100 100 100 100 100 100 100 100 100 100 100 100 100 100"
+      - series: 'technitium_zone_soa_serial{job="technitium", instance="dns-b", zone="example.com", type="Primary"}'
+        values: "100 100 100 200 200 200 200 200 200 200 200 200 200 200"
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: TechnitiumZoneSerialDivergence
+        exp_alerts: []
+      - eval_time: 12m
+        alertname: TechnitiumZoneSerialDivergence
+        exp_alerts: []
+      - eval_time: 13m
+        alertname: TechnitiumZoneSerialDivergence
+        exp_alerts:
+          - exp_labels:
+              zone: example.com
+              severity: warning
+            exp_annotations:
+              summary: "SOA serial divergence for zone example.com"
+              description: "Zone example.com does not report the same SOA serial on every polled node for 10 minutes, meaning at least one node is serving stale zone data."
+
+  # TechnitiumZoneTransferStale: expiry_timestamp_seconds - time() < 86400, for: 5m
+  - interval: 1m
+    input_series:
+      - series: 'technitium_zone_expiry_timestamp_seconds{instance="dns-a", zone="stale.example.com", type="Secondary"}'
+        values: "86520 86520 86520 86520 86520 86520 86520 86520 86520"
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: TechnitiumZoneTransferStale
+        exp_alerts: []
+      - eval_time: 7m
+        alertname: TechnitiumZoneTransferStale
+        exp_alerts: []
+      - eval_time: 8m
+        alertname: TechnitiumZoneTransferStale
+        exp_alerts:
+          - exp_labels:
+              instance: "dns-a"
+              zone: stale.example.com
+              type: Secondary
+              severity: warning
+            exp_annotations:
+              summary: "Secondary zone stale.example.com nearing SOA expiry on dns-a"
+              description: "Zone stale.example.com on dns-a is within 24 hours of its SOA expire with no successful transfer since. Tune the 86400-second threshold to a fraction of this zone's own SOA expire interval if it differs materially from the default."
+
+  # TechnitiumZoneSyncFailed: technitium_zone_sync_failed == 1, for: 10m
+  - interval: 1m
+    input_series:
+      - series: 'technitium_zone_sync_failed{instance="dns-a", zone="stale.example.com", type="Secondary"}'
+        values: "0 0 0 1 1 1 1 1 1 1 1 1 1 1"
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: TechnitiumZoneSyncFailed
+        exp_alerts: []
+      - eval_time: 12m
+        alertname: TechnitiumZoneSyncFailed
+        exp_alerts: []
+      - eval_time: 13m
+        alertname: TechnitiumZoneSyncFailed
+        exp_alerts:
+          - exp_labels:
+              instance: "dns-a"
+              zone: stale.example.com
+              type: Secondary
+              severity: warning
+            exp_annotations:
+              summary: "Zone stale.example.com transfer failing on dns-a"
+              description: "The last transfer attempt for secondary zone stale.example.com on dns-a failed, and has stayed failed for 10 minutes."
+
+  # TechnitiumZoneNotifyFailed: technitium_zone_notify_failed == 1, for: 10m
+  - interval: 1m
+    input_series:
+      - series: 'technitium_zone_notify_failed{instance="dns-a", zone="mail.example.com", type="Primary"}'
+        values: "0 0 0 1 1 1 1 1 1 1 1 1 1 1"
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: TechnitiumZoneNotifyFailed
+        exp_alerts: []
+      - eval_time: 12m
+        alertname: TechnitiumZoneNotifyFailed
+        exp_alerts: []
+      - eval_time: 13m
+        alertname: TechnitiumZoneNotifyFailed
+        exp_alerts:
+          - exp_labels:
+              instance: "dns-a"
+              zone: mail.example.com
+              type: Primary
+              severity: warning
+            exp_annotations:
+              summary: "Zone mail.example.com failing to notify secondaries from dns-a"
+              description: "Primary zone mail.example.com on dns-a has failed to notify at least one secondary for 10 minutes; see technitium_zone_notify_failed_peers for the count."
+
+  # TechnitiumZoneExpired: technitium_zone_expired == 1, for: 0m (fires immediately, no pending state to check)
+  - interval: 1m
+    input_series:
+      - series: 'technitium_zone_expired{instance="dns-a", zone="stale.example.com", type="Secondary"}'
+        values: "0 0 0 1"
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: TechnitiumZoneExpired
+        exp_alerts: []
+      - eval_time: 3m
+        alertname: TechnitiumZoneExpired
+        exp_alerts:
+          - exp_labels:
+              instance: "dns-a"
+              zone: stale.example.com
+              type: Secondary
+              severity: critical
+            exp_annotations:
+              summary: "Zone stale.example.com has expired on dns-a"
+              description: "Secondary zone stale.example.com on dns-a has passed its SOA expire with no successful transfer and is no longer authoritative for answers."
+
+  # TechnitiumZoneDisabled: technitium_zone_disabled == 1, for: 15m
+  - interval: 1m
+    input_series:
+      - series: 'technitium_zone_disabled{instance="dns-a", zone="sub.example.com", type="Stub"}'
+        values: "0 0 0 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1"
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: TechnitiumZoneDisabled
+        exp_alerts: []
+      - eval_time: 17m
+        alertname: TechnitiumZoneDisabled
+        exp_alerts: []
+      - eval_time: 18m
+        alertname: TechnitiumZoneDisabled
+        exp_alerts:
+          - exp_labels:
+              instance: "dns-a"
+              zone: sub.example.com
+              type: Stub
+              severity: info
+            exp_annotations:
+              summary: "Zone sub.example.com is disabled on dns-a"
+              description: "Zone sub.example.com on dns-a has been disabled for 15 minutes. Informational unless this zone is expected to be serving."
+
+  # TechnitiumZoneVisibilityMismatch: zones_visible{job="technitium"} != zones_reported{job="technitium"}, for: 10m
+  - interval: 1m
+    input_series:
+      - series: 'technitium_zones_visible{job="technitium", instance="dns-a"}'
+        values: "10 10 10 10 10 10 10 10 10 10 10 10 10 10"
+      - series: 'technitium_zones_reported{job="technitium", instance="dns-a"}'
+        values: "10 10 10 11 11 11 11 11 11 11 11 11 11 11"
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: TechnitiumZoneVisibilityMismatch
+        exp_alerts: []
+      - eval_time: 12m
+        alertname: TechnitiumZoneVisibilityMismatch
+        exp_alerts: []
+      - eval_time: 13m
+        alertname: TechnitiumZoneVisibilityMismatch
+        exp_alerts:
+          - exp_labels:
+              job: technitium
+              instance: "dns-a"
+              severity: warning
+            exp_annotations:
+              summary: "Zone visibility mismatch on dns-a"
+              description: "dns-a's API token can see a different zone count than the server reports owning, for 10 minutes, meaning the configured token cannot view every zone and per-zone metrics are incomplete."
+
+  # TechnitiumClusterNodeUnreachable: technitium_cluster_node_state{state="Unreachable"} == 1, for: 5m
+  - interval: 1m
+    input_series:
+      - series: 'technitium_cluster_node_state{instance="dns-a", node_name="dns-c.example.com", node_type="Secondary", state="Unreachable"}'
+        values: "0 0 0 1 1 1 1 1 1"
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: TechnitiumClusterNodeUnreachable
+        exp_alerts: []
+      - eval_time: 7m
+        alertname: TechnitiumClusterNodeUnreachable
+        exp_alerts: []
+      - eval_time: 8m
+        alertname: TechnitiumClusterNodeUnreachable
+        exp_alerts:
+          - exp_labels:
+              instance: "dns-a"
+              node_name: dns-c.example.com
+              node_type: Secondary
+              state: Unreachable
+              severity: warning
+            exp_annotations:
+              summary: "Cluster peer dns-c.example.com unreachable from dns-a"
+              description: "dns-a has reported cluster peer dns-c.example.com as Unreachable for 5 minutes."
+
+  # TechnitiumClusterNodeStateUnknown: technitium_cluster_node_state{state="Unknown"} == 1, for: 5m
+  - interval: 1m
+    input_series:
+      - series: 'technitium_cluster_node_state{instance="dns-a", node_name="dns-d.example.com", node_type="Secondary", state="Unknown"}'
+        values: "0 0 0 1 1 1 1 1 1"
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: TechnitiumClusterNodeStateUnknown
+        exp_alerts: []
+      - eval_time: 7m
+        alertname: TechnitiumClusterNodeStateUnknown
+        exp_alerts: []
+      - eval_time: 8m
+        alertname: TechnitiumClusterNodeStateUnknown
+        exp_alerts:
+          - exp_labels:
+              instance: "dns-a"
+              node_name: dns-d.example.com
+              node_type: Secondary
+              state: Unknown
+              severity: warning
+            exp_annotations:
+              summary: "Cluster peer dns-d.example.com state unknown from dns-a"
+              description: "dns-a has reported cluster peer dns-d.example.com in an Unknown connection state for 5 minutes."
+
+  # TechnitiumServerVersionUnsupported: technitium_server_version_supported == 0, for: 30m
+  - interval: 1m
+    input_series:
+      - series: 'technitium_server_version_supported{instance="dns-a"}'
+        values: "1 1 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0"
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: TechnitiumServerVersionUnsupported
+        exp_alerts: []
+      - eval_time: 32m
+        alertname: TechnitiumServerVersionUnsupported
+        exp_alerts: []
+      - eval_time: 33m
+        alertname: TechnitiumServerVersionUnsupported
+        exp_alerts:
+          - exp_labels:
+              instance: "dns-a"
+              severity: info
+            exp_annotations:
+              summary: "Technitium server version unsupported on dns-a"
+              description: "dns-a is running a Technitium server version this exporter does not recognize as supported. See technitium_server_version_info for the reported version."
+
+  # TechnitiumStaleData: technitium_exporter_cache_age_seconds > 300, for: 5m
+  - interval: 1m
+    input_series:
+      - series: 'technitium_exporter_cache_age_seconds{instance="dns-a"}'
+        values: "10 10 10 400 400 400 400 400 400"
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: TechnitiumStaleData
+        exp_alerts: []
+      - eval_time: 7m
+        alertname: TechnitiumStaleData
+        exp_alerts: []
+      - eval_time: 8m
+        alertname: TechnitiumStaleData
+        exp_alerts:
+          - exp_labels:
+              instance: "dns-a"
+              severity: warning
+            exp_annotations:
+              summary: "Technitium cache stale for dns-a"
+              description: "dns-a's cached poll result is over 300 seconds old (10x the default 30-second poll interval), for 5 minutes. Scrapes are returning stale data even though the target itself is up. Tune the threshold if this target's poll interval is configured higher than the default."
+
+  # TechnitiumCardinalityGrowth: technitium_exporter_series > 5000, for: 15m
+  - interval: 1m
+    input_series:
+      - series: 'technitium_exporter_series{instance="dns-a"}'
+        values: "200 200 200 6000 6000 6000 6000 6000 6000 6000 6000 6000 6000 6000 6000 6000 6000 6000 6000"
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: TechnitiumCardinalityGrowth
+        exp_alerts: []
+      - eval_time: 17m
+        alertname: TechnitiumCardinalityGrowth
+        exp_alerts: []
+      - eval_time: 18m
+        alertname: TechnitiumCardinalityGrowth
+        exp_alerts:
+          - exp_labels:
+              instance: "dns-a"
+              severity: warning
+            exp_annotations:
+              summary: "Technitium series count high for dns-a"
+              description: "dns-a's registry has rendered more than 5000 series for 15 minutes, most often from zone count growth. Tune this ceiling to the deployment's own expected zone and cluster-peer inventory."
