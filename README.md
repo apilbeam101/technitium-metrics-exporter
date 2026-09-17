@@ -43,6 +43,17 @@ Full install instructions:
 - [docs/INSTALL_DOCKER.md](docs/INSTALL_DOCKER.md)
 - [docs/INSTALL_KUBERNETES.md](docs/INSTALL_KUBERNETES.md)
 
+## Monitoring
+
+- [dashboards/technitium-dns.json](dashboards/technitium-dns.json) — a
+  generated Grafana dashboard: exporter health, per-node overview, zone
+  health with SOA serial divergence as the headline panel, transfer health,
+  protocol split, and cluster state.
+- [alerts/technitium-dns.yaml](alerts/technitium-dns.yaml) — Prometheus alert
+  rules covering exporter reachability, node health, zone transfer failure,
+  zone expiry, and cluster peer state, each with a `promtool` unit test in
+  [alerts/technitium-dns.test.yaml](alerts/technitium-dns.test.yaml).
+
 ## Documentation
 
 - [docs/DESIGN.md](docs/DESIGN.md) — what the exporter exposes and why

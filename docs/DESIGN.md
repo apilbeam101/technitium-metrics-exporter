@@ -694,7 +694,7 @@ rule that fires unconditionally.
 | `TechnitiumZoneNotifyFailed` | `technitium_zone_notify_failed == 1` |
 | `TechnitiumZoneExpired` | `technitium_zone_expired == 1` — critical, fires immediately |
 | `TechnitiumZoneDisabled` | `technitium_zone_disabled == 1` |
-| `TechnitiumZoneVisibilityMismatch` | `technitium_zones_visible != technitium_zones_reported` ([§5.3](#53-detecting-a-token-that-cannot-see-every-zone)) |
+| `TechnitiumZoneVisibilityMismatch` | `technitium_zones_visible != technitium_zones_reported` ([§5.3](#53-detecting-a-token-that-cannot-see-every-zone)) — only meaningful with `ZONES_INCLUDE_INTERNAL=true` |
 | `TechnitiumClusterNodeUnreachable` | `technitium_cluster_node_state{state="Unreachable"} == 1` |
 | `TechnitiumClusterNodeStateUnknown` | `technitium_cluster_node_state{state="Unknown"} == 1` |
 | `TechnitiumServerVersionUnsupported` | `technitium_server_version_supported == 0` |
@@ -735,33 +735,20 @@ CRD and applying that manifest there fails.
 ## 9. Open questions
 
 1. **Port 10053 is provisional**, pending a registered Prometheus port
-   allocation. Changing it after v1.0.0 breaks every deployed manifest, so it
-   must be resolved before the first tag.
+   allocation. Changing it after v1.0.0 breaks every deployed manifest.
+   Decision: ship 10053 as the default now; the pre-tag release checklist
+   gates the first tag on resolving the allocation, so it cannot slip
+   unnoticed into a release.
 2. **Zone-list pagination.** Omitting `pageNumber` returns all zones in one
-   call, which is what the exporter wants. Confirm the behaviour at several
-   hundred zones, and add pagination if the unpaginated response truncates or
-   is slow.
-3. **`TechnitiumZoneTransferStale` threshold.** The ideal threshold is a
-   fraction of each zone's own SOA `expire`, which `/api/zones/list` does not
-   report; reading it would need a records call and a wider grant. The shipped
-   rule uses a documented absolute default with tuning instructions.
-4. **Whether `admin/cluster/state`'s `configLastSynced` can ever carry
+   call, which is what the exporter wants. Todo: confirm the behaviour at
+   several hundred zones during Phase 14 live validation, and add pagination
+   if the unpaginated response truncates or is slow.
+3. **Whether `admin/cluster/state`'s `configLastSynced` can ever carry
    §3.2.10's never-sentinel.** A live capture confirms that endpoint's
    `nodes[].lastSeen` does; `configLastSynced` is parsed by the same shared
-   function defensively, but no capture has shown it doing so. Confirm during
-   Phase 14 live validation and update [§5.6](#56-cluster) once known either
-   way.
-5. **`TechnitiumZoneVisibilityMismatch`'s two sides are on different scopes.**
-   `technitium_zones_visible` excludes internal system zones whenever
-   `ZONES_INCLUDE_INTERNAL` is left at its default of `false`, while
-   `technitium_zones_reported` is the server's own unfiltered total
-   ([§5.3](#53-detecting-a-token-that-cannot-see-every-zone)); this project's
-   own fixtures (14 visible zones, 4 of them internal, against 11 reported)
-   demonstrate the shipped rule firing with a fully-permissioned token.
-   Resolve before Phase 14 live validation, either by subtracting
-   `technitium_zones_excluded_internal` from the visible side of the
-   comparison or by scoping the rule to `ZONES_INCLUDE_INTERNAL=true`
-   deployments only.
+   function defensively, but no capture has shown it doing so. Todo: confirm
+   during Phase 14 live validation and update [§5.6](#56-cluster) once known
+   either way.
 
 ---
 

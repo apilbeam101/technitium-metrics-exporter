@@ -481,10 +481,16 @@ lists in this plan.
 
 Walk the least-privilege token procedure (D§6.4) exactly as written, including
 deliberately withholding `View` on one zone to confirm
-`TechnitiumZoneVisibilityMismatch` fires.
+`TechnitiumZoneVisibilityMismatch` fires. Run this with `ZONES_INCLUDE_INTERNAL=true`
+— at the default `false`, the rule fires regardless of the withheld permission,
+which would make the test meaningless.
 
 Confirm that a deliberately stalled zone transfer produces a firing
 `TechnitiumZoneTransferStale` before the zone expires.
+
+Confirm whether `admin/cluster/state`'s `configLastSynced` field can ever
+carry D§3.2.10's never-sentinel against a real cluster member, and update
+D§5.6 once known either way (D§9.3).
 
 Record the procedure and results in `LIVE_VALIDATION.md`.
 

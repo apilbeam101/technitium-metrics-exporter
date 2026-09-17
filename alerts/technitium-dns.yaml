@@ -91,6 +91,12 @@ groups:
       # unalertable on a deployment that leaves it at its default off. Also
       # requires the job="technitium" scrape job name; a differently-named
       # job silently disables this rule rather than erroring.
+      #
+      # This comparison assumes ZONES_INCLUDE_INTERNAL=true. At the default of
+      # false, technitium_zones_visible excludes internal system zones while
+      # technitium_zones_reported does not, so the two sides are never equal
+      # and this rule fires permanently on a fully-permissioned token. Only
+      # enable this rule on deployments that set ZONES_INCLUDE_INTERNAL=true.
       - alert: TechnitiumZoneVisibilityMismatch
         expr: technitium_zones_visible{job="technitium"} != technitium_zones_reported{job="technitium"}
         for: 10m
