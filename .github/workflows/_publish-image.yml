@@ -1,0 +1,207 @@
+name: Publish image
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: Git ref to build from
+        required: true
+        type: string
+      version:
+        description: Image version tag (no leading v), e.g. 1.2.0
+        required: true
+        type: string
+      tag-latest:
+        description: Also push/mirror a :latest tag
+        required: false
+        type: boolean
+        default: true
+    outputs:
+      digest:
+        description: Digest of the multi-arch manifest pushed to GHCR
+        value: ${{ jobs.build.outputs.digest }}
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    outputs:
+      image: ${{ steps.image.outputs.name }}
+      digest: ${{ steps.build.outputs.digest }}
+      platforms: ${{ steps.platforms.outputs.platforms }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: resolve image name and commit
+        id: image
+        run: |
+          echo "name=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+          # Not github.sha: in a workflow_call the github context is always
+          # the caller's, which for rebuild.yml's schedule trigger is the
+          # default branch tip, not the tagged commit checked out above.
+          echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: compute tags
+        id: tags
+        env:
+          IMAGE: ${{ steps.image.outputs.name }}
+          VERSION: ${{ inputs.version }}
+          TAG_LATEST: ${{ inputs.tag-latest }}
+        run: |
+          {
+            echo "tags<<EOF"
+            echo "$IMAGE:$VERSION"
+            if [ "$TAG_LATEST" = "true" ]; then
+              echo "$IMAGE:latest"
+            fi
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        id: build
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          pull: true
+          build-args: |
+            GIT_COMMIT=${{ steps.image.outputs.commit }}
+            IMAGE_VERSION=${{ inputs.version }}
+          tags: ${{ steps.tags.outputs.tags }}
+
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ steps.image.outputs.name }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+
+      - name: resolve per-platform digests
+        id: platforms
+        env:
+          IMAGE: ${{ steps.image.outputs.name }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          set -eu
+          docker buildx imagetools inspect "$IMAGE@$DIGEST" --raw > manifest-index.json
+          # Assigned to a variable first, not echoed straight from the
+          # command substitution: `set -e` does not see a failure inside
+          # $(...) when the enclosing simple command is `echo`, which always
+          # succeeds — a crashed script would otherwise silently produce an
+          # empty `platforms=` instead of failing this step.
+          platforms=$(node --experimental-strip-types scripts/resolve-image-platforms.ts manifest-index.json)
+          echo "platforms=$platforms" >> "$GITHUB_OUTPUT"
+
+  # A separate job (not more steps in `build`) because an SPDX SBOM describes
+  # one platform's actual package contents, not the multi-arch index as a
+  # whole: `anchore/sbom-action` given the index digest silently resolves it
+  # to the runner's own platform, which would attest an amd64-only SBOM
+  # against a digest that also covers arm64.
+  sbom:
+    name: Attest per-platform SBOM (${{ matrix.entry.platform }})
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    strategy:
+      fail-fast: false
+      matrix:
+        entry: ${{ fromJSON(needs.build.outputs.platforms) }}
+    steps:
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
+        with:
+          image: ${{ needs.build.outputs.image }}@${{ matrix.entry.digest }}
+          format: spdx-json
+          output-file: sbom.spdx.json
+          # The registry attestation pushed below is the real deliverable.
+          # Both default to "true" and both default names collide across
+          # matrix cells: the workflow-artifact upload, and (on a tag push,
+          # since a workflow_call's github context is the caller's)
+          # attaching sbom.spdx.json to the matching GitHub Release as an
+          # asset.
+          upload-artifact: false
+          upload-release-assets: false
+
+      - uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4.1.0
+        with:
+          subject-name: ${{ needs.build.outputs.image }}
+          subject-digest: ${{ matrix.entry.digest }}
+          sbom-path: sbom.spdx.json
+          push-to-registry: true
+
+  # Best-effort: `imagetools create` copies the index, its image layers, and
+  # buildx's own in-index provenance children — but not the separate OCI
+  # referrer manifests actions/attest-build-provenance and actions/attest-sbom
+  # pushed above, which is what `gh attestation verify` actually checks. GHCR
+  # remains the attested source of truth for that; Docker Hub is a
+  # compatibility mirror, matching the Phase 13 spec, which only requires
+  # attestation on the GHCR push.
+  mirror-dockerhub:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    continue-on-error: true
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: mirror multi-arch manifest to Docker Hub
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          VERSION: ${{ inputs.version }}
+          TAG_LATEST: ${{ inputs.tag-latest }}
+          SOURCE_IMAGE: ${{ needs.build.outputs.image }}
+          SOURCE_DIGEST: ${{ needs.build.outputs.digest }}
+        run: |
+          set -eu
+          target="docker.io/${DOCKERHUB_USERNAME}/technitium-metrics-exporter"
+          args=(--tag "$target:$VERSION")
+          if [ "$TAG_LATEST" = "true" ]; then
+            args+=(--tag "$target:latest")
+          fi
+          docker buildx imagetools create "${args[@]}" "$SOURCE_IMAGE@$SOURCE_DIGEST"

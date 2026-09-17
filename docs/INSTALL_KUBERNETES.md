@@ -61,7 +61,7 @@ scrape_configs:
       - source_labels: [__param_target]
         target_label: instance
       - target_label: __address__
-        replacement: technitium-metrics-exporter.<namespace>.svc:10053
+        replacement: technitium-metrics-exporter.<namespace>.svc:10153
 ```
 
 Optional, and **only if** the Prometheus Operator's CRDs are already
@@ -84,9 +84,9 @@ as its **own** target, with `instance` set to the target name and `up == 1`.
 Honest-health check (N6), from a pod with network access to the Service:
 
 ```bash
-curl -s technitium-metrics-exporter.<namespace>.svc:10053/healthz
-curl -s technitium-metrics-exporter.<namespace>.svc:10053/readyz
-curl -s "technitium-metrics-exporter.<namespace>.svc:10053/metrics?target=dns-a" \
+curl -s technitium-metrics-exporter.<namespace>.svc:10153/healthz
+curl -s technitium-metrics-exporter.<namespace>.svc:10153/readyz
+curl -s "technitium-metrics-exporter.<namespace>.svc:10153/metrics?target=dns-a" \
   | grep -E '^technitium_(up|zone_soa_serial|zones_visible)'
 ```
 

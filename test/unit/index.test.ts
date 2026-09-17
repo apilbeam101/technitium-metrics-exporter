@@ -15,7 +15,7 @@ function baseConfig(targetCount: number): AppConfig {
       caBundlePath: undefined,
       tlsInsecureSkipVerify: false,
     })),
-    metricsPort: 10053,
+    metricsPort: 10153,
     metricsBindAddress: "0.0.0.0",
     pollIntervalSeconds: 30,
     clusterPollIntervalSeconds: 60,

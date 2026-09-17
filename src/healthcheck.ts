@@ -10,7 +10,7 @@ const TIMEOUT_MS = 5_000;
 
 function main(): void {
   const rawPort = process.env.METRICS_PORT;
-  const port = rawPort === undefined || rawPort === "" ? "10053" : rawPort;
+  const port = rawPort === undefined || rawPort === "" ? "10153" : rawPort;
   const usesTls = (process.env.METRICS_TLS_CERT_PATH ?? "") !== "";
   const client = usesTls ? https : http;
 

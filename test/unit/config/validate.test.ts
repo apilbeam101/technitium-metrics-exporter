@@ -248,7 +248,7 @@ describe("validate — TLS skip-verify", () => {
 describe("validate — behavioural scalars", () => {
   it("applies documented defaults", () => {
     const { config } = validate(baseVars());
-    assert.equal(config.metricsPort, 10053);
+    assert.equal(config.metricsPort, 10153);
     assert.equal(config.metricsBindAddress, "0.0.0.0");
     assert.equal(config.pollIntervalSeconds, 30);
     assert.equal(config.clusterPollIntervalSeconds, 60);

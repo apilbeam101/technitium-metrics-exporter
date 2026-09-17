@@ -9,5 +9,5 @@ spec:
     app.kubernetes.io/name: technitium-metrics-exporter
   ports:
     - name: metrics
-      port: 10053
+      port: 10153
       targetPort: metrics

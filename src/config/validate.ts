@@ -331,7 +331,7 @@ export function validate(vars: EnvVars): ValidationResult {
     );
   }
 
-  const metricsPort = parseIntegerVar(vars, "METRICS_PORT", 10053, errors, { min: 1, max: 65535 });
+  const metricsPort = parseIntegerVar(vars, "METRICS_PORT", 10153, errors, { min: 1, max: 65535 });
   const metricsBindAddress = parseMetricsBindAddress(vars, errors);
   const pollIntervalSeconds = parseIntegerVar(vars, "POLL_INTERVAL_SECONDS", 30, errors, {
     min: 1,

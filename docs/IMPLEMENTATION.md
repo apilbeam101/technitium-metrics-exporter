@@ -411,7 +411,7 @@ redaction of the echoed session token (D§3.2.11) and of `stackTrace`.
 ## Phase 11 — Deployment artefacts
 
 `Dockerfile`: multi-stage builder to slim runtime, production dependencies only,
-fixed non-root UID/GID `10001`, OCI labels, `EXPOSE 10053`, exec-form
+fixed non-root UID/GID `10001`, OCI labels, `EXPOSE 10153`, exec-form
 `ENTRYPOINT` so the process is PID 1 and receives `SIGTERM` directly, and a
 `HEALTHCHECK` that honours the port and TLS settings and **sets its own request
 timeout** — Docker's `--timeout` marks a check failed but does not reap the
@@ -468,8 +468,13 @@ official release and sha256-verified.
 
 Resolve the port allocation (D§9.1) before the first tag.
 
-**Exit:** a dry-run tag on a fork produces an attested multi-arch image in both
-registries, and a release with real notes.
+**Exit:** a dry-run tag on a fork produces an attested multi-arch image on
+GHCR — build provenance for the manifest as a whole plus a per-architecture
+SPDX SBOM, each independently verifiable with `gh attestation verify` —
+mirrored to Docker Hub without those GitHub-native attestations, since
+`docker buildx imagetools create` copies the manifest and its layers but not
+the separate OCI referrer manifests they're pushed as, and a release with
+real notes.
 
 ## Phase 14 — Live validation and fixture replacement
 
@@ -530,12 +535,12 @@ npm ci && npm run typecheck && npm run lint && npm test && npm run build && npm 
 cp example.env .env      # set TECHNITIUM_TARGETS and TECHNITIUM_API_TOKEN
 node dist/index.js
 
-curl -s localhost:10053/healthz
-curl -s localhost:10053/readyz                       # ready after the first poll
-curl -s localhost:10053/metrics | head               # global registry only
-curl -s "localhost:10053/metrics?target=dns-a" \
+curl -s localhost:10153/healthz
+curl -s localhost:10153/readyz                       # ready after the first poll
+curl -s localhost:10153/metrics | head               # global registry only
+curl -s "localhost:10153/metrics?target=dns-a" \
   | grep -E '^technitium_(up|zone_soa_serial|zones_visible)'
-curl -s -o /dev/null -w '%{http_code}\n' "localhost:10053/metrics?target=nope"   # 400
+curl -s -o /dev/null -w '%{http_code}\n' "localhost:10153/metrics?target=nope"   # 400
 ```
 
 Honest-health check (N6):
@@ -554,7 +559,7 @@ promtool check rules alerts/technitium-dns.yaml
 promtool test rules alerts/technitium-dns.test.yaml
 
 docker build -t technitium-metrics-exporter .
-docker run --rm --env-file .env -p 10053:10053 technitium-metrics-exporter
+docker run --rm --env-file .env -p 10153:10153 technitium-metrics-exporter
 ```
 
 Kubernetes: apply `deploy/kubernetes/`, confirm the pod reaches Ready, then

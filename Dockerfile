@@ -45,7 +45,7 @@ COPY package.json package-lock.json ./
 
 USER exporter:exporter
 
-EXPOSE 10053
+EXPOSE 10153
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
     CMD ["node", "dist/healthcheck.js"]

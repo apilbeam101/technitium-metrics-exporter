@@ -9,7 +9,7 @@ data:
   # match the per-target override suffix convention used below and in
   # secret.example.yaml (upper-cased, "-" replaced with "_").
   TECHNITIUM_TARGETS: "dns-a=https://dns-a.example.com:53443,dns-b=https://dns-b.example.com:53443"
-  METRICS_PORT: "10053"
+  METRICS_PORT: "10153"
   METRICS_BIND_ADDRESS: "0.0.0.0"
   POLL_INTERVAL_SECONDS: "30"
   CLUSTER_POLL_INTERVAL_SECONDS: "60"

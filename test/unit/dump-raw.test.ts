@@ -74,7 +74,7 @@ function target(name: string): TargetConfig {
 function baseConfig(targets: readonly TargetConfig[]): AppConfig {
   return {
     targets,
-    metricsPort: 10053,
+    metricsPort: 10153,
     metricsBindAddress: "0.0.0.0",
     pollIntervalSeconds: 30,
     clusterPollIntervalSeconds: 60,

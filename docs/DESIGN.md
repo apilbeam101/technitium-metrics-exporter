@@ -293,7 +293,7 @@ scrape_configs:
       - source_labels: [__param_target]
         target_label: instance
       - target_label: __address__
-        replacement: technitium-metrics-exporter:10053
+        replacement: technitium-metrics-exporter:10153
 ```
 
 ### 4.4 One registry per target
@@ -326,8 +326,9 @@ never delays or fails another target's cycle.
 - Tests via `node:test`. Lint and format via Biome.
 - Apache-2.0.
 
-Default listen port **10053**, provisional pending a registered Prometheus port
-allocation ([§9](#9-open-questions)).
+Default listen port **10153**, verified free against the Prometheus
+port-allocation registry and pending the maintainer registering it there
+before the first tag ([§9](#9-open-questions)).
 
 ---
 
@@ -605,7 +606,7 @@ TECHNITIUM_TLS_INSECURE_SKIP_VERIFY__DNS_A=false
 ### 6.2 Behaviour
 
 ```
-METRICS_PORT=10053
+METRICS_PORT=10153
 METRICS_BIND_ADDRESS=0.0.0.0
 POLL_INTERVAL_SECONDS=30
 CLUSTER_POLL_INTERVAL_SECONDS=60     # configuration-detail collector only; peer state rides the main poll
@@ -734,11 +735,17 @@ CRD and applying that manifest there fails.
 
 ## 9. Open questions
 
-1. **Port 10053 is provisional**, pending a registered Prometheus port
-   allocation. Changing it after v1.0.0 breaks every deployed manifest.
-   Decision: ship 10053 as the default now; the pre-tag release checklist
-   gates the first tag on resolving the allocation, so it cannot slip
-   unnoticed into a release.
+1. **Port allocation.** The originally-shipped default, 10053, was checked
+   during Phase 13 directly against Prometheus's own public port-allocation
+   registry and found already claimed. 10153 was checked against the same
+   registry, confirmed unclaimed, and is now the default throughout this
+   repository and its deployment manifests. Changing it again after v1.0.0
+   breaks every deployed manifest, so this is final barring a collision
+   appearing before the first tag. What remains open: adding this exporter's
+   own entry to that registry is an edit to a resource outside this
+   repository, not something a commit here can do — the pre-tag release
+   checklist gates the first tag on the maintainer having made that edit, so
+   it cannot slip unnoticed into a release.
 2. **Zone-list pagination.** Omitting `pageNumber` returns all zones in one
    call, which is what the exporter wants. Todo: confirm the behaviour at
    several hundred zones during Phase 14 live validation, and add pagination

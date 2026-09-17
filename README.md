@@ -33,8 +33,8 @@ node dist/index.js
 ```
 
 ```bash
-curl -s localhost:10053/healthz
-curl -s "localhost:10053/metrics?target=<name>"
+curl -s localhost:10153/healthz
+curl -s "localhost:10153/metrics?target=<name>"
 ```
 
 Full install instructions:

@@ -7,7 +7,7 @@ tests:
   # TechnitiumExporterAbsent: up{job="technitium"} == 0, for: 5m
   - interval: 1m
     input_series:
-      - series: 'up{job="technitium", instance="dns-a:10053"}'
+      - series: 'up{job="technitium", instance="dns-a:10153"}'
         values: "1 1 1 0 0 0 0 0 0"
     alert_rule_test:
       - eval_time: 2m
@@ -21,16 +21,16 @@ tests:
         exp_alerts:
           - exp_labels:
               job: technitium
-              instance: "dns-a:10053"
+              instance: "dns-a:10153"
               severity: critical
             exp_annotations:
-              summary: "Technitium exporter target dns-a:10053 is unreachable"
-              description: "Prometheus has not been able to scrape dns-a:10053 for 5 minutes. Every technitium_* series for this target has stopped existing, not just gone stale, so no other rule in this file can fire for it."
+              summary: "Technitium exporter target dns-a:10153 is unreachable"
+              description: "Prometheus has not been able to scrape dns-a:10153 for 5 minutes. Every technitium_* series for this target has stopped existing, not just gone stale, so no other rule in this file can fire for it."
 
   # TechnitiumNodeDown: technitium_up == 0, for: 5m
   - interval: 1m
     input_series:
-      - series: 'technitium_up{instance="dns-a:10053"}'
+      - series: 'technitium_up{instance="dns-a:10153"}'
         values: "1 1 1 0 0 0 0 0 0"
     alert_rule_test:
       - eval_time: 2m
@@ -43,16 +43,16 @@ tests:
         alertname: TechnitiumNodeDown
         exp_alerts:
           - exp_labels:
-              instance: "dns-a:10053"
+              instance: "dns-a:10153"
               severity: critical
             exp_annotations:
-              summary: "Technitium node dns-a:10053 rejected the last poll"
-              description: "The exporter reached dns-a:10053 but the last poll cycle did not reach the DNS node or its session token was not accepted, for 5 minutes."
+              summary: "Technitium node dns-a:10153 rejected the last poll"
+              description: "The exporter reached dns-a:10153 but the last poll cycle did not reach the DNS node or its session token was not accepted, for 5 minutes."
 
   # TechnitiumCollectorFailing: technitium_collector_success == 0, for: 10m
   - interval: 1m
     input_series:
-      - series: 'technitium_collector_success{instance="dns-a:10053", collector="zones"}'
+      - series: 'technitium_collector_success{instance="dns-a:10153", collector="zones"}'
         values: "1 1 1 0 0 0 0 0 0 0 0 0 0 0"
     alert_rule_test:
       - eval_time: 2m
@@ -65,12 +65,12 @@ tests:
         alertname: TechnitiumCollectorFailing
         exp_alerts:
           - exp_labels:
-              instance: "dns-a:10053"
+              instance: "dns-a:10153"
               collector: zones
               severity: warning
             exp_annotations:
-              summary: "Technitium collector zones failing on dns-a:10053"
-              description: "The zones collector for dns-a:10053 has stayed unsuccessful for 10 minutes: either its last poll attempt failed, or its API token is missing the permission the collector needs, in which case it has never run at all. Either way the metrics it owns are stale or absent."
+              summary: "Technitium collector zones failing on dns-a:10153"
+              description: "The zones collector for dns-a:10153 has stayed unsuccessful for 10 minutes: either its last poll attempt failed, or its API token is missing the permission the collector needs, in which case it has never run at all. Either way the metrics it owns are stale or absent."
 
   # TechnitiumZoneSerialDivergence: max by (zone) (...{job="technitium"}) != min by (zone) (...{job="technitium"}), for: 10m
   - interval: 1m

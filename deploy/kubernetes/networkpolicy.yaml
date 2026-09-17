@@ -31,7 +31,7 @@ spec:
           #     kubernetes.io/metadata.name: monitoring
       ports:
         - protocol: TCP
-          port: 10053
+          port: 10153
   egress:
     # Cluster DNS: needed to resolve the DNS nodes' hostnames from
     # TECHNITIUM_TARGETS before the TLS connection below can even be made.

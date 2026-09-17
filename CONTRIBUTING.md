@@ -48,9 +48,9 @@ This adds a line like:
 Signed-off-by: Your Name <you@example.com>
 ```
 
-Once CI exists (see [docs/IMPLEMENTATION.md](docs/IMPLEMENTATION.md) Phase 13),
-pull requests with unsigned commits will fail the DCO check there. Until then,
-sign off anyway — it's the same requirement, just not yet machine-enforced.
+Pull requests with unsigned commits (or commits whose `Signed-off-by` trailer
+does not match the commit's author or committer email) fail the DCO check in
+`.github/workflows/ci.yml` on all pull requests.
 
 ## Reporting a vulnerability
 

@@ -35,7 +35,7 @@ function fullyEnabledTarget(): TargetConfig {
 function fullyEnabledAppConfig(): AppConfig {
   return {
     targets: [fullyEnabledTarget()],
-    metricsPort: 10053,
+    metricsPort: 10153,
     metricsBindAddress: "0.0.0.0",
     pollIntervalSeconds: 30,
     clusterPollIntervalSeconds: 60,

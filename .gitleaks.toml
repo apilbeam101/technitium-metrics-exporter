@@ -8,7 +8,7 @@ title = "technitium-metrics-exporter gitleaks config"
 [extend]
 useDefault = true
 
-[allowlist]
+[[allowlists]]
 description = "Self-signed/CA-signed keys generated solely to exercise TLS/mTLS wiring in tests — never valid for, or used against, a real host"
 paths = [
   '''test/support/tls/localhost-key\.pem''',
@@ -16,3 +16,13 @@ paths = [
   '''test/support/tls/client-key\.pem''',
   '''test/support/tls/untrusted-client-key\.pem''',
 ]
+
+[[allowlists]]
+description = "Synthetic hex placeholder used only to exercise the token-shaped-string branch of scripts/sanitize-fixtures.ts's own leak detector — not a real credential. Scoped to its one source file (condition = \"and\") so the literal isn't allowlisted repo-wide."
+paths = [
+  '''test/unit/scripts/sanitize-fixtures\.test\.ts''',
+]
+regexes = [
+  '''abcdef0123456789abcdef0123456789abcdef''',
+]
+condition = "and"

@@ -10,7 +10,7 @@ services:
       # Compose's own `${VAR}` interpolation reads a .env file next to this
       # compose file (deploy/.env), not the env_file: entry above (../.env),
       # so it cannot be kept in lockstep automatically here.
-      - "10053:10053"
+      - "10153:10153"
     read_only: true
     cap_drop:
       - ALL

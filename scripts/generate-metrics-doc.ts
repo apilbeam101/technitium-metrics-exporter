@@ -56,7 +56,7 @@ function exampleTarget(): TargetConfig {
 function exampleAppConfig(): AppConfig {
   return {
     targets: [exampleTarget()],
-    metricsPort: 10053,
+    metricsPort: 10153,
     metricsBindAddress: "0.0.0.0",
     pollIntervalSeconds: 30,
     clusterPollIntervalSeconds: 60,

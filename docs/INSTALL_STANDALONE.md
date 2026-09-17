@@ -63,12 +63,12 @@ Point Prometheus at it using the `scrape_configs` snippet in
 ## Verify
 
 ```bash
-curl -s localhost:10053/healthz
-curl -s localhost:10053/readyz                       # ready after the first poll
-curl -s localhost:10053/metrics | head               # global registry only
-curl -s "localhost:10053/metrics?target=dns-a" \
+curl -s localhost:10153/healthz
+curl -s localhost:10153/readyz                       # ready after the first poll
+curl -s localhost:10153/metrics | head               # global registry only
+curl -s "localhost:10153/metrics?target=dns-a" \
   | grep -E '^technitium_(up|zone_soa_serial|zones_visible)'
-curl -s -o /dev/null -w '%{http_code}\n' "localhost:10053/metrics?target=nope"   # 400
+curl -s -o /dev/null -w '%{http_code}\n' "localhost:10153/metrics?target=nope"   # 400
 ```
 
 Honest-health check (N6):
