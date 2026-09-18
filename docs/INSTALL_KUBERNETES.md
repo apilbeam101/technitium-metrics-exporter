@@ -8,14 +8,25 @@ ingress to the Prometheus pods.
 
 ## Prerequisites
 
-- A cluster with the container image reachable (pushed to a registry, or
-  loaded directly for a local cluster).
+- A cluster able to reach `ghcr.io` (the default), or with a self-built image
+  reachable another way — pushed to your own registry, or loaded directly for
+  a local cluster (kind, minikube).
 - A dedicated, least-privilege Technitium API token — see
   [docs/DESIGN.md §6.4](DESIGN.md#64-least-privilege-token).
 
 ## Install
 
-Build and publish the image (adjust the tag for your registry):
+[deploy/kubernetes/deployment.yaml](../deploy/kubernetes/deployment.yaml)
+already points `image:` at the maintainer's own published, multi-arch,
+attested release (`ghcr.io/apilbeam101/technitium-metrics-exporter`, pinned
+to a specific version rather than `:latest`) — no build or push needed
+unless you want to run your own image instead. See
+[docs/INSTALL_DOCKER.md](INSTALL_DOCKER.md#install)'s attestation
+verification commands if you want to confirm the published image's
+provenance and SBOM before deploying it.
+
+To build and publish your own instead (adjust the tag for your registry, and
+`deployment.yaml`'s `image:` to match):
 
 ```bash
 docker build \
@@ -29,7 +40,7 @@ Create the real Secret — see the comment in
 [deploy/kubernetes/secret.example.yaml](../deploy/kubernetes/secret.example.yaml)
 for the `kubectl create secret` form; never apply that file as-is. Then edit
 [deploy/kubernetes/configmap.yaml](../deploy/kubernetes/configmap.yaml)'s
-`TECHNITIUM_TARGETS`, and `deployment.yaml`'s `image:`, before applying:
+`TECHNITIUM_TARGETS` before applying:
 
 ```bash
 kubectl apply -f deploy/kubernetes/configmap.yaml

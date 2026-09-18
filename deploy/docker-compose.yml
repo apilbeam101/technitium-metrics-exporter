@@ -1,7 +1,10 @@
 services:
   technitium-metrics-exporter:
-    build: ..
-    image: technitium-metrics-exporter:latest
+    # Pinned to a specific tagged release rather than :latest, so re-running
+    # `docker compose pull` on an existing deployment can't silently change
+    # what's running. Building from source instead: replace this with
+    # `build: ..` (see docs/INSTALL_DOCKER.md's "build it yourself" path).
+    image: ghcr.io/apilbeam101/technitium-metrics-exporter:0.1.0
     restart: unless-stopped
     env_file:
       - ../.env
