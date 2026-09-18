@@ -43,6 +43,10 @@ jobs:
           cache: npm
 
       - run: npm ci
+      # check:pack-allowlist inspects `npm pack`'s tarball contents, which
+      # requires dist/ to exist — without this, it fails on a clean checkout
+      # even though nothing is actually wrong with the pack allowlist itself.
+      - run: npm run build
       - run: npm run check
       - run: npm run check:alerts
 
