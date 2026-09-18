@@ -1,3 +1,5 @@
 {
-  "status": "invalid-token"
+  "server": "technitium-a.technitium-cluster.kube.example.com",
+  "status": "invalid-token",
+  "errorMessage": "Invalid token or session expired."
 }

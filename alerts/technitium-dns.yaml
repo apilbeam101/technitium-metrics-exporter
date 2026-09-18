@@ -97,14 +97,24 @@ groups:
       # technitium_zones_reported does not, so the two sides are never equal
       # and this rule fires permanently on a fully-permissioned token. Only
       # enable this rule on deployments that set ZONES_INCLUDE_INTERNAL=true.
+      #
+      # Excludes clustered instances (technitium_cluster_initialized == 1):
+      # a live capture confirmed /api/zones/list never returns a clustered
+      # node's own catalog zone or its cluster-coordination zone, while
+      # dashboard/stats/get's zone total counts both — a permanent,
+      # permission-independent gap on every clustered node, fully-permissioned
+      # token or not. A non-clustered node showed zero gap under the same
+      # fully-permissioned token, confirming the comparison is sound there.
       - alert: TechnitiumZoneVisibilityMismatch
-        expr: technitium_zones_visible{job="technitium"} != technitium_zones_reported{job="technitium"}
+        expr: |
+          (technitium_zones_visible{job="technitium"} != technitium_zones_reported{job="technitium"})
+          unless on (instance) technitium_cluster_initialized{job="technitium"} == 1
         for: 10m
         labels:
           severity: warning
         annotations:
           summary: "Zone visibility mismatch on {{ $labels.instance }}"
-          description: "{{ $labels.instance }}'s API token can see a different zone count than the server reports owning, for 10 minutes, meaning the configured token cannot view every zone and per-zone metrics are incomplete."
+          description: "{{ $labels.instance }}'s API token can see a different zone count than the server reports owning, for 10 minutes, meaning the configured token cannot view every zone and per-zone metrics are incomplete. Not evaluated on clustered instances, which have a permanent, unrelated gap between these two metrics."
 
       # technitium_cluster_node_state only exists once the opt-in cluster
       # collector is enabled (ENABLE_CLUSTER_COLLECTOR=true); this rule and

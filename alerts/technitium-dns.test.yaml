@@ -220,6 +220,8 @@ tests:
         values: "10 10 10 10 10 10 10 10 10 10 10 10 10 10"
       - series: 'technitium_zones_reported{job="technitium", instance="dns-a"}'
         values: "10 10 10 11 11 11 11 11 11 11 11 11 11 11"
+      - series: 'technitium_cluster_initialized{job="technitium", instance="dns-a"}'
+        values: "0 0 0 0 0 0 0 0 0 0 0 0 0 0"
     alert_rule_test:
       - eval_time: 2m
         alertname: TechnitiumZoneVisibilityMismatch
@@ -236,7 +238,26 @@ tests:
               severity: warning
             exp_annotations:
               summary: "Zone visibility mismatch on dns-a"
-              description: "dns-a's API token can see a different zone count than the server reports owning, for 10 minutes, meaning the configured token cannot view every zone and per-zone metrics are incomplete."
+              description: "dns-a's API token can see a different zone count than the server reports owning, for 10 minutes, meaning the configured token cannot view every zone and per-zone metrics are incomplete. Not evaluated on clustered instances, which have a permanent, unrelated gap between these two metrics."
+
+  # A clustered instance has the same permanent gap (its own catalog and
+  # cluster-coordination zones are never returned by zones/list, confirmed
+  # by a live capture) but must never fire, regardless of duration.
+  - interval: 1m
+    input_series:
+      - series: 'technitium_zones_visible{job="technitium", instance="dns-b"}'
+        values: "10 10 10 10 10 10 10 10 10 10 10 10 10 10"
+      - series: 'technitium_zones_reported{job="technitium", instance="dns-b"}'
+        values: "12 12 12 12 12 12 12 12 12 12 12 12 12 12"
+      - series: 'technitium_cluster_initialized{job="technitium", instance="dns-b"}'
+        values: "1 1 1 1 1 1 1 1 1 1 1 1 1 1"
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: TechnitiumZoneVisibilityMismatch
+        exp_alerts: []
+      - eval_time: 13m
+        alertname: TechnitiumZoneVisibilityMismatch
+        exp_alerts: []
 
   # TechnitiumClusterNodeUnreachable: technitium_cluster_node_state{state="Unreachable"} == 1, for: 5m
   - interval: 1m

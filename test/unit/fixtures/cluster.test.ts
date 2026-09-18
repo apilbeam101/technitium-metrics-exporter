@@ -21,7 +21,7 @@ interface ClusterStateFixture {
   heartbeatRetryIntervalSeconds: number;
   configRefreshIntervalSeconds: number;
   configLastSynced: string;
-  nodes: ClusterNodeFixture[];
+  clusterNodes: ClusterNodeFixture[];
 }
 
 const fixturePath = join(
@@ -41,7 +41,7 @@ function loadFixture(): ClusterStateFixture {
 }
 
 function loadNodes(): ClusterNodeFixture[] {
-  return loadFixture().nodes;
+  return loadFixture().clusterNodes;
 }
 
 describe("cluster/state fixture", () => {
@@ -100,12 +100,16 @@ describe("cluster/state fixture", () => {
     assert.equal(typeof fixture.configLastSynced, "string");
   });
 
-  it("exposes only the three interval fields DESIGN.md's cluster metrics list covers, under their real seconds-suffixed names", () => {
+  it("exposes the three interval fields DESIGN.md's cluster metrics list covers, under their real seconds-suffixed names", () => {
     const fixture = loadFixture() as unknown as Record<string, unknown>;
     assert.equal(typeof fixture.heartbeatRefreshIntervalSeconds, "number");
     assert.equal(typeof fixture.heartbeatRetryIntervalSeconds, "number");
     assert.equal(typeof fixture.configRefreshIntervalSeconds, "number");
-    assert.equal(Object.hasOwn(fixture, "configRetryIntervalSeconds"), false);
+  });
+
+  it("also carries configRetryIntervalSeconds, confirmed present in a live capture but outside D§5.6's exported metric surface", () => {
+    const fixture = loadFixture() as unknown as Record<string, unknown>;
+    assert.equal(typeof fixture.configRetryIntervalSeconds, "number");
   });
 
   it("reports interval values on a plausible seconds scale, not a millisecond scale", () => {

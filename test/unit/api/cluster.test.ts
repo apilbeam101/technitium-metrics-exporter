@@ -23,8 +23,10 @@ describe("parseClusterStateResponse", () => {
 
   // Exercises parseDotNetTimestamp's defensive sentinel handling on this
   // field; no live capture has confirmed configLastSynced ever actually
-  // carries the sentinel (D§3.2.10's documented case is nodes[].lastSeen,
-  // which this parser doesn't read at all — see api/cluster.ts).
+  // carries the sentinel (D§3.2.10's documented case is clusterNodes[].lastSeen,
+  // which this parser doesn't read at all — see api/cluster.ts). A live
+  // capture has confirmed configLastSynced can be genuinely absent instead
+  // (see the next test and D§9.3).
   it("maps a never-sentinel configLastSynced to undefined", () => {
     const raw = JSON.parse(CLUSTER_STATE) as { response: Record<string, unknown> };
     raw.response.configLastSynced = "0001-01-01T00:00:00";
@@ -49,28 +51,34 @@ describe("parseClusterStateResponse", () => {
 
   it("ignores fields outside this design's four-metric surface that the real fixture actually carries, including the peer inventory and its addresses", () => {
     const detail = parseClusterStateResponse(CLUSTER_STATE) as unknown as Record<string, unknown>;
-    assert.equal(detail.nodes, undefined);
+    assert.equal(detail.clusterNodes, undefined);
     assert.equal(detail.clusterInitialized, undefined);
     assert.equal(detail.dnsServerDomain, undefined);
     assert.equal(detail.version, undefined);
     assert.equal(detail.clusterDomain, undefined);
   });
 
-  // The real fixture doesn't carry these two (confirmed by
-  // test/unit/fixtures/cluster.test.ts), so this constructs a synthetic
-  // envelope matching the published API docs' example shape instead —
-  // otherwise the assertion would hold regardless of whether the parser
-  // actually ignores the field or simply never saw it.
-  it("tolerates configRetryIntervalSeconds and serverIpAddresses without exporting them, per the published (unconfirmed-live) API docs shape", () => {
+  // configRetryIntervalSeconds is confirmed present in a live capture (unlike
+  // when this test was first written against the published API docs alone),
+  // and the real fixture now carries it too — so this reads it directly
+  // rather than constructing a synthetic envelope.
+  it("tolerates configRetryIntervalSeconds without exporting it, confirmed present in a live capture", () => {
+    const detail = parseClusterStateResponse(CLUSTER_STATE) as unknown as Record<string, unknown>;
+    assert.equal(detail.configRetryIntervalSeconds, undefined);
+  });
+
+  // serverIpAddresses is never requested (includeServerIpAddresses isn't
+  // passed) so it never arrives in a real capture either — this constructs a
+  // synthetic envelope instead, otherwise the assertion would hold regardless
+  // of whether the parser actually ignores the field or simply never saw it.
+  it("tolerates serverIpAddresses without exporting it, per the published (unconfirmed-live) API docs shape", () => {
     const raw = JSON.parse(CLUSTER_STATE) as { response: Record<string, unknown> };
-    raw.response.configRetryIntervalSeconds = 60;
     raw.response.serverIpAddresses = ["192.0.2.5"];
 
     const detail = parseClusterStateResponse(JSON.stringify(raw)) as unknown as Record<
       string,
       unknown
     >;
-    assert.equal(detail.configRetryIntervalSeconds, undefined);
     assert.equal(detail.serverIpAddresses, undefined);
   });
 

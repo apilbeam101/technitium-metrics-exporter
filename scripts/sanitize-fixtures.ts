@@ -251,6 +251,23 @@ function reportLeaks(results: FileCheckResult[]): void {
   }
 }
 
+export interface IoArgs {
+  readonly inputPath: string | undefined;
+  readonly outPath: string | undefined;
+}
+
+// Exported for its own unit test: with --out absent, outIndex is -1, so
+// outIndex + 1 is 0 — the same index as the input path's own default
+// position — and naively excluding both "outIndex and outIndex + 1" from the
+// argument list would silently discard the input path too.
+export function resolveIoArgs(args: readonly string[]): IoArgs {
+  const outIndex = args.indexOf("--out");
+  const outPath = outIndex === -1 ? undefined : args[outIndex + 1];
+  const inputPath =
+    outIndex === -1 ? args[0] : args.filter((_, i) => i !== outIndex && i !== outIndex + 1)[0];
+  return { inputPath, outPath };
+}
+
 function main(): void {
   const args = process.argv.slice(2);
 
@@ -280,9 +297,7 @@ function main(): void {
     return;
   }
 
-  const outIndex = args.indexOf("--out");
-  const outPath = outIndex === -1 ? undefined : args[outIndex + 1];
-  const inputPath = args.filter((_, i) => i !== outIndex && i !== outIndex + 1)[0];
+  const { inputPath, outPath } = resolveIoArgs(args);
 
   if (inputPath === undefined) {
     console.error("Usage: sanitize-fixtures.ts <input-path|-> [--out <output-path>]");

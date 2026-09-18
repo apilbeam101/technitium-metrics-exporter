@@ -3,7 +3,43 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, describe, it } from "node:test";
-import { checkPaths, findLeaks, sanitize } from "../../../scripts/sanitize-fixtures.ts";
+import {
+  checkPaths,
+  findLeaks,
+  resolveIoArgs,
+  sanitize,
+} from "../../../scripts/sanitize-fixtures.ts";
+
+describe("resolveIoArgs", () => {
+  it("resolves the input path from argv[0] when --out is absent", () => {
+    assert.deepEqual(resolveIoArgs(["input.json"]), {
+      inputPath: "input.json",
+      outPath: undefined,
+    });
+  });
+
+  it("resolves both paths when --out is present", () => {
+    assert.deepEqual(resolveIoArgs(["input.json", "--out", "output.json"]), {
+      inputPath: "input.json",
+      outPath: "output.json",
+    });
+  });
+
+  it("resolves the input path when --out precedes it", () => {
+    assert.deepEqual(resolveIoArgs(["--out", "output.json", "input.json"]), {
+      inputPath: "input.json",
+      outPath: "output.json",
+    });
+  });
+
+  it("resolves stdin's own '-' as the input path when --out is absent", () => {
+    assert.deepEqual(resolveIoArgs(["-"]), { inputPath: "-", outPath: undefined });
+  });
+
+  it("leaves inputPath undefined when no arguments are given", () => {
+    assert.deepEqual(resolveIoArgs([]), { inputPath: undefined, outPath: undefined });
+  });
+});
 
 describe("findLeaks", () => {
   it("flags a routable public IPv4 address", () => {

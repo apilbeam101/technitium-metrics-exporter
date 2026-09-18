@@ -403,6 +403,22 @@ This depends on the opt-in statistics collector. When that is off, the install
 guides direct users to assert an absolute expected count against
 `technitium_zones_by_type` instead.
 
+**Clustered nodes have a permanent, permission-independent gap here.** A live
+capture against a fully-permissioned, clustered node found `/api/zones/list`
+under-counting `/api/dashboard/stats/get`'s zone total by exactly two; the
+dashboard UI's own zone list, under the same admin session, showed both
+missing zones: the cluster's own catalog zone (`type: Catalog`) and its
+DNSSEC-signed cluster-coordination zone (named after the cluster domain
+itself). Passing `includeInternal=true` to `/api/zones/list` made no
+difference — neither zone is returned by that endpoint under any combination
+tried, regardless of token permission, while the server's authoritative zone
+total counts both. A non-clustered node under the same fully-permissioned
+token showed no such gap, confirming the comparison is sound there. The
+shipped alert excludes clustered instances
+(`technitium_cluster_initialized == 1`) rather than encoding this gap's exact
+size, since the number of cluster-management zones isn't a value this design
+has evidence is stable across cluster sizes or Technitium versions.
+
 ### 5.4 Normalised lifetime counters
 
 Parsed from `metrics/text` and re-exported with a stable prefixed name, real
@@ -499,13 +515,14 @@ behaviour for a peer that has never connected is unconfirmed. Both an absent
 key and a never-sentinel resolve to the same absent series, so either
 behaviour renders correctly without a code change once confirmed.
 
-`admin/cluster/state`'s own response also carries a `nodes[]` array whose
-`lastSeen` field is the one §3.2.10's sentinel is documented against, and a
-live capture confirms it does carry that sentinel. This design has no metric
-for it: exporting it would duplicate the peer identity/state that
-`technitium_cluster_node_state` already sources from `session/get`, plus the
-network address and URL fields §4.2 excludes. `nodes[]` is present in the
-response and deliberately not exported.
+`admin/cluster/state`'s own response also carries a `clusterNodes[]` array
+(not `nodes[]`, corrected after a live capture) whose `lastSeen` field is the
+one §3.2.10's sentinel is documented against, and a live capture confirms it
+does carry that sentinel. This design has no metric for it: exporting it
+would duplicate the peer identity/state that `technitium_cluster_node_state`
+already sources from `session/get`, plus the network address and URL fields
+§4.2 excludes. `clusterNodes[]` is present in the response and deliberately
+not exported.
 `technitium_cluster_config_last_synced_timestamp_seconds`'s own
 `configLastSynced` field reuses the same shared timestamp parser
 defensively — any .NET timestamp field could in principle carry the
@@ -695,7 +712,7 @@ rule that fires unconditionally.
 | `TechnitiumZoneNotifyFailed` | `technitium_zone_notify_failed == 1` |
 | `TechnitiumZoneExpired` | `technitium_zone_expired == 1` — critical, fires immediately |
 | `TechnitiumZoneDisabled` | `technitium_zone_disabled == 1` |
-| `TechnitiumZoneVisibilityMismatch` | `technitium_zones_visible != technitium_zones_reported` ([§5.3](#53-detecting-a-token-that-cannot-see-every-zone)) — only meaningful with `ZONES_INCLUDE_INTERNAL=true` |
+| `TechnitiumZoneVisibilityMismatch` | `technitium_zones_visible != technitium_zones_reported` ([§5.3](#53-detecting-a-token-that-cannot-see-every-zone)) — only meaningful with `ZONES_INCLUDE_INTERNAL=true`; excludes clustered instances, which have a permanent, unrelated gap between these two metrics |
 | `TechnitiumClusterNodeUnreachable` | `technitium_cluster_node_state{state="Unreachable"} == 1` |
 | `TechnitiumClusterNodeStateUnknown` | `technitium_cluster_node_state{state="Unknown"} == 1` |
 | `TechnitiumServerVersionUnsupported` | `technitium_server_version_supported == 0` |
@@ -752,10 +769,16 @@ CRD and applying that manifest there fails.
    if the unpaginated response truncates or is slow.
 3. **Whether `admin/cluster/state`'s `configLastSynced` can ever carry
    §3.2.10's never-sentinel.** A live capture confirms that endpoint's
-   `nodes[].lastSeen` does; `configLastSynced` is parsed by the same shared
-   function defensively, but no capture has shown it doing so. Todo: confirm
-   during Phase 14 live validation and update [§5.6](#56-cluster) once known
-   either way.
+   `clusterNodes[].lastSeen` does; `configLastSynced` is parsed by the same
+   shared function defensively. A live capture against an actively clustered,
+   actively heartbeating node (`Administration: View` granted) confirms
+   `configLastSynced` can be genuinely absent from the response entirely —
+   the same node's `heartbeatRefreshIntervalSeconds`/`heartbeatRetryIntervalSeconds`/
+   `configRefreshIntervalSeconds`/`configRetryIntervalSeconds` were all
+   present, so this wasn't a "not clustered" or "not yet synced" case. No
+   capture has yet shown the field present at all, with or without the
+   sentinel, so whether it can carry the sentinel remains open — still todo
+   for a future live validation pass.
 
 ---
 

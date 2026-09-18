@@ -95,7 +95,7 @@ describe("session/get fixtures", () => {
 });
 
 describe("envelope fixtures", () => {
-  it("invalid-token envelope carries only the status field", () => {
+  it("invalid-token envelope reports status: invalid-token", () => {
     const fixture = JSON.parse(
       readFileSync(join(fixturesDir, "envelope-invalid-token.json"), "utf8"),
     ) as { status: string };

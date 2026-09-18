@@ -496,17 +496,44 @@ deliberately withholding `View` on one zone to confirm
 — at the default `false`, the rule fires regardless of the withheld permission,
 which would make the test meaningless.
 
+Done, in two stages: a coarser variant first (revoking the entire `Zones: View`
+section grant), which triggers this exporter's own permission gate and skips
+the zones collector entirely — `technitium_zones_visible` goes genuinely
+absent rather than becoming a smaller present number, and `!=` against a
+missing series doesn't fire in Prometheus — followed by D§6.4's exact
+per-zone scenario (`View` withheld on specific zones, the section grant left
+intact), which produced a real, present, smaller `technitium_zones_visible`
+and confirmed the alert's condition genuinely holds against real data.
+Separately, this pass found a real, permission-independent gap between these
+two metrics on any clustered node (see D§5.3) and the alert now excludes
+clustered instances accordingly.
+
 Confirm that a deliberately stalled zone transfer produces a firing
-`TechnitiumZoneTransferStale` before the zone expires.
+`TechnitiumZoneTransferStale` before the zone expires. **Skipped** — out of
+scope for this validation pass; the alert's crafted-data `promtool` coverage
+stands in for it. See `LIVE_VALIDATION.md`.
 
 Confirm whether `admin/cluster/state`'s `configLastSynced` field can ever
 carry D§3.2.10's never-sentinel against a real cluster member, and update
-D§5.6 once known either way (D§9.3).
+D§5.6 once known either way (D§9.3). Partially done: a live capture confirmed
+the field can be genuinely absent even on an actively clustered, actively
+heartbeating node; no capture has yet shown it present at all, so whether it
+can carry the sentinel stays open.
 
-Record the procedure and results in `LIVE_VALIDATION.md`.
+Zone-list pagination behaviour at scale (D§9, open question 2) — **skipped**,
+also out of scope for this pass; both real targets available had far too few
+zones to exercise it.
+
+Recorded in [`docs/LIVE_VALIDATION.md`](LIVE_VALIDATION.md), including which
+fixtures were reconciled against real captures and which stayed
+hand-authored because neither real target could produce the scenario without
+changing production configuration.
 
 **Exit:** every fixture is a sanitised real capture; every shipped alert has
-been observed firing at least once against real or crafted data.
+been observed firing at least once against real or crafted data. Met in a
+deliberately scoped sense — see `LIVE_VALIDATION.md` for exactly what stayed
+hand-authored and why the crafted-data `promtool` suite already satisfies the
+alert-firing half of this bar on its own.
 
 Once this bar is met, promote `CHANGELOG.md`'s `[Unreleased]` section to
 `[0.1.0]` and push the first real tag against this repository (Phase 13's

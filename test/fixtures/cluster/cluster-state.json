@@ -7,8 +7,9 @@
     "heartbeatRefreshIntervalSeconds": 30,
     "heartbeatRetryIntervalSeconds": 10,
     "configRefreshIntervalSeconds": 900,
+    "configRetryIntervalSeconds": 60,
     "configLastSynced": "2026-09-15T08:00:00Z",
-    "nodes": [
+    "clusterNodes": [
       {
         "id": 1342079372,
         "name": "dns-a.example.com",
