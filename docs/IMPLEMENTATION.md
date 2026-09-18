@@ -468,6 +468,12 @@ official release and sha256-verified.
 
 Resolve the port allocation (D§9.1) before the first tag.
 
+The first tag against this repository itself is deferred until Phase 14
+completes: a technically correct release pipeline is not the same claim as an
+exporter validated against a real Technitium server, and v0.1.0 should mean
+both. This phase's own exit bar is the dry run below, exercised on a fork —
+not a tag on this repository.
+
 **Exit:** a dry-run tag on a fork produces an attested multi-arch image on
 GHCR — build provenance for the manifest as a whole plus a per-architecture
 SPDX SBOM, each independently verifiable with `gh attestation verify` —
@@ -501,6 +507,10 @@ Record the procedure and results in `LIVE_VALIDATION.md`.
 
 **Exit:** every fixture is a sanitised real capture; every shipped alert has
 been observed firing at least once against real or crafted data.
+
+Once this bar is met, promote `CHANGELOG.md`'s `[Unreleased]` section to
+`[0.1.0]` and push the first real tag against this repository (Phase 13's
+deferred exit condition).
 
 ---
 
