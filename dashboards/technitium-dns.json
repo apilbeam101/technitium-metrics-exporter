@@ -63,6 +63,7 @@
       },
       "targets": [
         {
+          "legendFormat": "{{ instance }}",
           "expr": "up{job=\"technitium\"}",
           "refId": "A"
         }
@@ -116,6 +117,7 @@
       },
       "targets": [
         {
+          "legendFormat": "{{ instance }}",
           "expr": "technitium_up",
           "refId": "A"
         }
@@ -169,8 +171,8 @@
       },
       "targets": [
         {
+          "legendFormat": "{{ instance }} - {{ collector }}",
           "expr": "technitium_collector_success",
-          "legendFormat": "{{ collector }}",
           "refId": "A"
         }
       ],
@@ -224,6 +226,7 @@
       },
       "targets": [
         {
+          "legendFormat": "{{ instance }}",
           "expr": "technitium_exporter_cache_age_seconds",
           "refId": "A"
         }
@@ -245,6 +248,7 @@
       },
       "targets": [
         {
+          "legendFormat": "{{ instance }}",
           "expr": "technitium_exporter_series",
           "refId": "A"
         }
@@ -282,8 +286,8 @@
       },
       "targets": [
         {
-          "expr": "rate(technitium_queries_total[5m])",
           "legendFormat": "{{ instance }}",
+          "expr": "rate(technitium_queries_total[5m])",
           "refId": "A"
         }
       ]
@@ -304,13 +308,13 @@
       },
       "targets": [
         {
-          "expr": "rate(technitium_cached_total[5m])",
           "legendFormat": "{{ instance }} cached",
+          "expr": "rate(technitium_cached_total[5m])",
           "refId": "A"
         },
         {
-          "expr": "rate(technitium_blocked_total[5m])",
           "legendFormat": "{{ instance }} blocked",
+          "expr": "rate(technitium_blocked_total[5m])",
           "refId": "B"
         }
       ]
@@ -331,6 +335,7 @@
       },
       "targets": [
         {
+          "legendFormat": "{{ instance }}",
           "expr": "technitium_uptime_seconds",
           "refId": "A"
         }
@@ -352,6 +357,7 @@
       },
       "targets": [
         {
+          "legendFormat": "{{ instance }}",
           "expr": "technitium_clients_total",
           "refId": "A"
         }
@@ -389,8 +395,8 @@
       },
       "targets": [
         {
-          "expr": "max by (zone) (technitium_zone_soa_serial{job=\"technitium\"}) - min by (zone) (technitium_zone_soa_serial{job=\"technitium\"})",
           "legendFormat": "{{ zone }}",
+          "expr": "max by (zone) (technitium_zone_soa_serial{job=\"technitium\"}) - min by (zone) (technitium_zone_soa_serial{job=\"technitium\"})",
           "refId": "A"
         }
       ],
@@ -412,8 +418,8 @@
       },
       "targets": [
         {
-          "expr": "technitium_zone_dnssec_status == 1",
           "legendFormat": "{{ zone }}: {{ status }}",
+          "expr": "technitium_zone_dnssec_status == 1",
           "refId": "A"
         }
       ]
@@ -434,6 +440,7 @@
       },
       "targets": [
         {
+          "legendFormat": "{{ instance }}",
           "expr": "sum(technitium_zone_disabled == 1)",
           "refId": "A"
         }
@@ -455,8 +462,8 @@
       },
       "targets": [
         {
-          "expr": "technitium_zones_by_type",
           "legendFormat": "{{ type }}",
+          "expr": "technitium_zones_by_type",
           "refId": "A"
         }
       ]
@@ -493,8 +500,8 @@
       },
       "targets": [
         {
-          "expr": "technitium_zone_expiry_timestamp_seconds - time()",
           "legendFormat": "{{ zone }}",
+          "expr": "technitium_zone_expiry_timestamp_seconds - time()",
           "refId": "A"
         }
       ]
@@ -515,6 +522,7 @@
       },
       "targets": [
         {
+          "legendFormat": "{{ instance }}",
           "expr": "sum(technitium_zone_sync_failed == 1)",
           "refId": "A"
         }
@@ -536,6 +544,7 @@
       },
       "targets": [
         {
+          "legendFormat": "{{ instance }}",
           "expr": "sum(technitium_zone_notify_failed == 1)",
           "refId": "A"
         }
@@ -557,6 +566,7 @@
       },
       "targets": [
         {
+          "legendFormat": "{{ instance }}",
           "expr": "sum(technitium_zone_expired == 1)",
           "refId": "A"
         }
@@ -578,13 +588,13 @@
       },
       "targets": [
         {
+          "legendFormat": "{{ instance }} visible",
           "expr": "technitium_zones_visible{job=\"technitium\"}",
-          "legendFormat": "visible",
           "refId": "A"
         },
         {
+          "legendFormat": "{{ instance }} reported",
           "expr": "technitium_zones_reported{job=\"technitium\"}",
-          "legendFormat": "reported",
           "refId": "B"
         }
       ],
@@ -622,8 +632,8 @@
       },
       "targets": [
         {
-          "expr": "technitium_stats_window_queries",
           "legendFormat": "{{ protocol }}",
+          "expr": "technitium_stats_window_queries",
           "refId": "A"
         }
       ]
@@ -644,8 +654,8 @@
       },
       "targets": [
         {
-          "expr": "technitium_stats_window_queries_by_response",
           "legendFormat": "{{ response_type }}",
+          "expr": "technitium_stats_window_queries_by_response",
           "refId": "A"
         }
       ]
@@ -666,8 +676,8 @@
       },
       "targets": [
         {
-          "expr": "technitium_stats_window_queries_by_type",
           "legendFormat": "{{ query_type }}",
+          "expr": "technitium_stats_window_queries_by_type",
           "refId": "A"
         }
       ]
@@ -688,6 +698,7 @@
       },
       "targets": [
         {
+          "legendFormat": "{{ instance }}",
           "expr": "technitium_stats_window_seconds",
           "refId": "A"
         }
@@ -726,8 +737,8 @@
       },
       "targets": [
         {
-          "expr": "technitium_cluster_node_state == 1",
           "legendFormat": "{{ node_name }}: {{ state }}",
+          "expr": "technitium_cluster_node_state == 1",
           "refId": "A"
         }
       ],
@@ -749,6 +760,7 @@
       },
       "targets": [
         {
+          "legendFormat": "{{ instance }}",
           "expr": "technitium_cluster_nodes",
           "refId": "A"
         }
@@ -770,6 +782,7 @@
       },
       "targets": [
         {
+          "legendFormat": "{{ instance }}",
           "expr": "technitium_cluster_initialized",
           "refId": "A"
         }
@@ -791,6 +804,7 @@
       },
       "targets": [
         {
+          "legendFormat": "{{ instance }}",
           "expr": "technitium_cluster_config_last_synced_timestamp_seconds",
           "refId": "A"
         }

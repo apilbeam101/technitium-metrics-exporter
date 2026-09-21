@@ -49,7 +49,11 @@ function row(title: string, y: number): Panel {
 // than one target needs distinct ones or one series silently overwrites the
 // other's response in the render.
 function assignRefIds(targets: Target[]): QueryTarget[] {
-  return targets.map((target, i) => ({ ...target, refId: String.fromCharCode(65 + i) }));
+  return targets.map((target, i) => ({
+    legendFormat: "{{ instance }}",
+    ...target,
+    refId: String.fromCharCode(65 + i),
+  }));
 }
 
 function panel(
@@ -115,7 +119,7 @@ function buildPanels(): Panel[] {
       "stat",
       "Collector success",
       { h: 4, w: 6, x: 8, y },
-      [{ expr: "technitium_collector_success", legendFormat: "{{ collector }}" }],
+      [{ expr: "technitium_collector_success", legendFormat: "{{ instance }} - {{ collector }}" }],
       {
         fieldConfig: HEALTH_FIELD_CONFIG,
         description:
@@ -204,8 +208,14 @@ function buildPanels(): Panel[] {
       "Zone visibility (visible vs. reported)",
       { h: 6, w: 4, x: 20, y },
       [
-        { expr: 'technitium_zones_visible{job="technitium"}', legendFormat: "visible" },
-        { expr: 'technitium_zones_reported{job="technitium"}', legendFormat: "reported" },
+        {
+          expr: 'technitium_zones_visible{job="technitium"}',
+          legendFormat: "{{ instance }} visible",
+        },
+        {
+          expr: 'technitium_zones_reported{job="technitium"}',
+          legendFormat: "{{ instance }} reported",
+        },
       ],
       {
         description:
