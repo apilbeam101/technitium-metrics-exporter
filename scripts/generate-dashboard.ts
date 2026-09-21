@@ -2,7 +2,7 @@ import { writeFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
 const OUTPUT_PATH = "dashboards/technitium-dns.json";
-// biome-ignore lint/suspicious/noTemplateCurlyInString: Grafana's own __inputs substitution syntax, resolved by Grafana on import, not a JS template-string typo
+// biome-ignore lint/suspicious/noTemplateCurlyInString: Grafana's own variable-interpolation syntax, resolved at dashboard load time, not a JS template-string typo
 const DATASOURCE = { type: "prometheus", uid: "${DS_PROMETHEUS}" };
 
 interface GridPos {
@@ -276,20 +276,36 @@ function buildPanels(): Panel[] {
   return panels;
 }
 
+// A datasource-type template variable, not the __inputs/__requires form
+// Grafana.com's own dashboard-sharing export produces: __inputs is only ever
+// substituted by the "Import dashboard" UI flow, so a dashboard loaded by
+// file-based provisioning (the deploy/ Docker and Kubernetes manifests'
+// route) would keep the literal, invalid "${DS_PROMETHEUS}" datasource
+// forever. A template variable is resolved by Grafana every time the
+// dashboard model loads, regardless of how it got there, and needs no
+// hardcoded datasource UID that could dangle.
+function buildTemplating(): { list: unknown[] } {
+  return {
+    list: [
+      {
+        name: "DS_PROMETHEUS",
+        label: "Prometheus",
+        type: "datasource",
+        query: "prometheus",
+        current: {},
+        hide: 0,
+        refresh: 1,
+        regex: "",
+        skipUrlSync: false,
+      },
+    ],
+  };
+}
+
 export function generateDashboard(): string {
   nextId = 1;
 
   const dashboard = {
-    __inputs: [
-      {
-        name: "DS_PROMETHEUS",
-        label: "Prometheus",
-        description: "Prometheus datasource scraping this exporter",
-        type: "datasource",
-        pluginId: "prometheus",
-      },
-    ],
-    __requires: [{ type: "grafana", id: "grafana", name: "Grafana", version: "10.0.0" }],
     title: "Technitium DNS",
     uid: "technitium-dns",
     description:
@@ -301,6 +317,7 @@ export function generateDashboard(): string {
     version: 1,
     time: { from: "now-6h", to: "now" },
     refresh: "30s",
+    templating: buildTemplating(),
     panels: buildPanels(),
   };
 
