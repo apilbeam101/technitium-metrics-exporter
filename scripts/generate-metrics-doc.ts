@@ -40,7 +40,7 @@ const EXAMPLE_CLOCK: Clock = {
 const EXAMPLE_BUILD_INFO: BuildInfo = {
   version: "0.0.0-docs-example",
   commit: "0000000",
-  nodeVersion: "v26.0.0",
+  nodeVersion: "v24.0.0",
 };
 
 function exampleTarget(): TargetConfig {

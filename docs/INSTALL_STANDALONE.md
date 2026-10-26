@@ -5,7 +5,7 @@ container runtime involved.
 
 ## Prerequisites
 
-- Node.js ≥ 26 on the host.
+- Node.js ≥ 24 on the host.
 - A dedicated, least-privilege Technitium API token — see
   [docs/DESIGN.md §6.4](DESIGN.md#64-least-privilege-token).
 

@@ -48,7 +48,7 @@ describe("buildGlobalRegistry", () => {
     const registry = buildGlobalRegistry(baseConfig(2), {
       version: "1.2.3",
       commit: "abc1234",
-      nodeVersion: "v26.0.0",
+      nodeVersion: "v24.0.0",
     });
 
     const { names, entry: targets } = await metricNamesAndValue(
@@ -70,7 +70,7 @@ describe("buildGlobalRegistry", () => {
     assert.deepEqual(buildInfo?.values[0]?.labels, {
       version: "1.2.3",
       commit: "abc1234",
-      node_version: "v26.0.0",
+      node_version: "v24.0.0",
     });
   });
 

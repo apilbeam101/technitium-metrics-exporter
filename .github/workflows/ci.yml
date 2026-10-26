@@ -121,7 +121,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-        node-version: [26, current]
+        node-version: [24, current]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     steps:

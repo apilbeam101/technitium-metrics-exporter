@@ -87,7 +87,7 @@ async function declaredMetricTypes(): Promise<Map<string, string>> {
   const globalRegistry = buildGlobalRegistry(fullyEnabledAppConfig(), {
     version: "0.0.0-test",
     commit: "0000000",
-    nodeVersion: "v26.0.0",
+    nodeVersion: "v24.0.0",
   });
   const global = (await globalRegistry.getMetricsAsJSON()) as Array<{ name: string; type: string }>;
 

@@ -174,7 +174,7 @@ recorded as a success.
 
 ## Phase 0 — Scaffold and hygiene
 
-`package.json` (Apache-2.0, `engines.node >=26`, `files` allowlist, `bin`),
+`package.json` (Apache-2.0, `engines.node >=24`, `files` allowlist, `bin`),
 `tsconfig.json` and `tsconfig.test.json`, `biome.json`, `.gitignore`,
 `.dockerignore`, `.gitattributes`, `.gitleaks.toml`, `LICENSE`, `README.md`,
 `CONTRIBUTING.md` (DCO), `CODE_OF_CONDUCT.md`, `SECURITY.md`, `CHANGELOG.md`,
@@ -438,7 +438,7 @@ rule observed both firing and not firing.
 `ci.yml`:
 
 - fast leg — typecheck, lint, unit tests
-- matrix — Linux, macOS and Windows across Node 26 and current, running build
+- matrix — Linux, macOS and Windows across Node 24 and current, running build
   **and** typecheck **and** the full suite, so a platform-specific type error is
   caught and the `dist` smoke tests actually run
 - multi-arch docker build without push, plus image hygiene

@@ -316,7 +316,7 @@ never delays or fails another target's cycle.
 
 ### 4.5 Technology
 
-- Node.js **≥ 26**, TypeScript **7.x**, ESM, `strict` plus
+- Node.js **≥ 24**, TypeScript **7.x**, ESM, `strict` plus
   `exactOptionalPropertyTypes` and `noUncheckedIndexedAccess`.
 - Runtime dependencies: **`@prometheus-io/client`** (the official Prometheus
   client library for Node.js) and **`undici`**, and nothing else. No web

@@ -9,13 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
-- Container image rebuilt on `node:26-slim` (Node.js 26.12.1), which fixes CVE-2026-111497 (High), an out-of-bounds write in the Brotli decoder bundled with Node.js. The 0.1.0 image ran Node.js 24.21.0, which is vulnerable.
+- Container image rebuilt on `node:26-slim` (Node.js 26.12.1), which fixes CVE-2026-111497 (High), an out-of-bounds write in the Brotli decoder bundled with Node.js. The 0.1.0 image ran Node.js 24.21.0, which is vulnerable. Standalone installs should run Node.js 24.22.1, 26.12.1 or later; the minimum supported major version remains 24.
 - `undici` upgraded to 8.12.3, fixing GHSA-xjj6-f33q-929c (High: denial of service via an unhandled error on excessive content-encodings), GHSA-4qv8-2p9j-2685 (unbounded memory in the EventSource parser) and GHSA-f72v-6w45-q472 (Subresource Integrity bypass)
 
 ### Changed
 
-- Minimum supported Node.js raised from 24 to 26 (`engines.node`, startup version check, CI matrix, installation docs). Standalone installs must run Node.js 26.12.1 or later to get the CVE-2026-111497 fix.
-- Development dependencies and pinned GitHub Actions updated: `@biomejs/biome` 2.5.15, `@types/node` 26.6.5, `actions/setup-node` 7.1.0, `github/codeql-action/upload-sarif` 4.39.0, `anchore/sbom-action` 0.24.3
+- Development dependencies and pinned GitHub Actions updated: `@biomejs/biome` 2.6.2, `@types/node` 26.6.5, `actions/setup-node` 7.1.0, `github/codeql-action/upload-sarif` 4.39.1, `anchore/sbom-action` 0.24.3
+- Single-version CI and release jobs run on Node.js 26 to match the container runtime; the test matrix still covers Node.js 24 and current
 
 ### Fixed
 
