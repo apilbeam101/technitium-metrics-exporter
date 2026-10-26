@@ -684,7 +684,7 @@ Rendered once for the whole process, at the bare `/metrics` route (no
 ```
 # HELP technitium_exporter_build_info Exporter build information; always 1
 # TYPE technitium_exporter_build_info gauge
-technitium_exporter_build_info{version="0.0.0-docs-example",commit="0000000",node_version="v24.0.0"} 1
+technitium_exporter_build_info{version="0.0.0-docs-example",commit="0000000",node_version="v26.0.0"} 1
 ```
 
 ### `technitium_exporter_targets`

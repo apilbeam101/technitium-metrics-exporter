@@ -19,13 +19,13 @@ with a GitHub build-provenance attestation covering the whole image and a
 per-architecture SPDX SBOM attestation covering each:
 
 ```bash
-docker pull ghcr.io/apilbeam101/technitium-metrics-exporter:0.1.0
-# or: docker pull docker.io/apilbeam101/technitium-metrics-exporter:0.1.0
+docker pull ghcr.io/apilbeam101/technitium-metrics-exporter:0.1.1
+# or: docker pull docker.io/apilbeam101/technitium-metrics-exporter:0.1.1
 # :latest also exists on both, tracking the newest non-prerelease tag
 
 # Provenance is attested against the multi-arch manifest as a whole, so the
 # tag reference itself is enough:
-gh attestation verify oci://ghcr.io/apilbeam101/technitium-metrics-exporter:0.1.0 \
+gh attestation verify oci://ghcr.io/apilbeam101/technitium-metrics-exporter:0.1.1 \
   --owner apilbeam101 --predicate-type https://slsa.dev/provenance/v1
 
 # The SBOM is attested per architecture, not against the multi-arch manifest
@@ -34,7 +34,7 @@ gh attestation verify oci://ghcr.io/apilbeam101/technitium-metrics-exporter:0.1.
 # manifest, so pick that out of the index directly instead:
 arch=$(docker version --format '{{.Server.Arch}}')
 digest=$(docker buildx imagetools inspect \
-  ghcr.io/apilbeam101/technitium-metrics-exporter:0.1.0 --raw \
+  ghcr.io/apilbeam101/technitium-metrics-exporter:0.1.1 --raw \
   | jq -r --arg a "$arch" \
     '.manifests[] | select(.platform.os == "linux" and .platform.architecture == $a) | .digest')
 gh attestation verify "oci://ghcr.io/apilbeam101/technitium-metrics-exporter@${digest}" \
@@ -44,7 +44,7 @@ gh attestation verify "oci://ghcr.io/apilbeam101/technitium-metrics-exporter@${d
 ```bash
 cp example.env .env      # set TECHNITIUM_TARGETS and TECHNITIUM_API_TOKEN
 docker run --rm --env-file .env -p 10153:10153 \
-  ghcr.io/apilbeam101/technitium-metrics-exporter:0.1.0
+  ghcr.io/apilbeam101/technitium-metrics-exporter:0.1.1
 ```
 
 Or with Compose, which also applies the container hardening (`read_only`,

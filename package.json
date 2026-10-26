@@ -1,11 +1,11 @@
 {
   "name": "technitium-metrics-exporter",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Prometheus exporter for Technitium DNS Server",
   "license": "Apache-2.0",
   "type": "module",
   "engines": {
-    "node": ">=24"
+    "node": ">=26"
   },
   "files": [
     "dist",
@@ -41,11 +41,11 @@
   },
   "dependencies": {
     "@prometheus-io/client": "^0.16.1",
-    "undici": "^8.11.2"
+    "undici": "^8.12.3"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.5.14",
-    "@types/node": "^26.6.2",
+    "@biomejs/biome": "^2.5.15",
+    "@types/node": "^26.6.5",
     "typescript": "^7.0.2"
   }
 }

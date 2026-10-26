@@ -5,6 +5,23 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.1] - 2026-10-26
+
+### Security
+
+- Container image rebuilt on `node:26-slim` (Node.js 26.12.1), which fixes CVE-2026-111497 (High), an out-of-bounds write in the Brotli decoder bundled with Node.js. The 0.1.0 image ran Node.js 24.21.0, which is vulnerable.
+- `undici` upgraded to 8.12.3, fixing GHSA-xjj6-f33q-929c (High: denial of service via an unhandled error on excessive content-encodings), GHSA-4qv8-2p9j-2685 (unbounded memory in the EventSource parser) and GHSA-f72v-6w45-q472 (Subresource Integrity bypass)
+
+### Changed
+
+- Minimum supported Node.js raised from 24 to 26 (`engines.node`, startup version check, CI matrix, installation docs). Standalone installs must run Node.js 26.12.1 or later to get the CVE-2026-111497 fix.
+- Development dependencies and pinned GitHub Actions updated: `@biomejs/biome` 2.5.15, `@types/node` 26.6.5, `actions/setup-node` 7.1.0, `github/codeql-action/upload-sarif` 4.39.0, `anchore/sbom-action` 0.24.3
+
+### Fixed
+
+- Dashboard datasource resolution for provisioned Grafana deployments
+- Dashboard panels without an explicit legend now default to the `instance` label instead of showing the raw metric name and label set
+
 ## [0.1.0] - 2026-09-18
 
 ### Added

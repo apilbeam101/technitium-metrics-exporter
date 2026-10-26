@@ -2,7 +2,7 @@
 // engines.node enforcement: engines is advisory unless a package manager is
 // configured to enforce it, and this binary may also be invoked directly
 // (e.g. `node dist/index.js`) with no package manager involved at all.
-const MIN_MAJOR_VERSION = 24;
+const MIN_MAJOR_VERSION = 26;
 
 export function checkNodeVersion(
   nodeVersion: string = process.version,

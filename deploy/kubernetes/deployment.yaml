@@ -33,7 +33,7 @@ spec:
           # from source instead: point this at your own registry (or a
           # locally built/side-loaded image for kind/minikube) and switch
           # imagePullPolicy to Always if the tag you use there is mutable.
-          image: ghcr.io/apilbeam101/technitium-metrics-exporter:0.1.0
+          image: ghcr.io/apilbeam101/technitium-metrics-exporter:0.1.1
           imagePullPolicy: IfNotPresent
           ports:
             - name: metrics

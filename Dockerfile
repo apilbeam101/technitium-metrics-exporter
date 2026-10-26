@@ -6,19 +6,19 @@
 # pure-JS — so running them under QEMU emulation for a cross-arch build wastes
 # time for no benefit. Only the final "runtime" stage below actually needs to
 # match the platform `docker buildx build --platform` was asked for.
-FROM --platform=$BUILDPLATFORM node:24-slim AS deps
+FROM --platform=$BUILDPLATFORM node:26-slim AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 
-FROM --platform=$BUILDPLATFORM node:24-slim AS builder
+FROM --platform=$BUILDPLATFORM node:26-slim AS builder
 WORKDIR /app
 COPY package.json package-lock.json tsconfig.json ./
 RUN npm ci
 COPY src ./src
 RUN npm run build
 
-FROM node:24-slim AS runtime
+FROM node:26-slim AS runtime
 
 ARG GIT_COMMIT=unknown
 ARG IMAGE_VERSION=0.0.0
