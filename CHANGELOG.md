@@ -17,11 +17,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Development dependencies and pinned GitHub Actions updated: `@biomejs/biome` 2.6.2, `@types/node` 26.6.5, `actions/setup-node` 7.1.0, `github/codeql-action/upload-sarif` 4.39.1, `anchore/sbom-action` 0.24.3
 - Single-version CI and release jobs run on Node.js 26 to match the container runtime; the test matrix still covers Node.js 24 and current
 
-### Fixed
-
-- Dashboard datasource resolution for provisioned Grafana deployments
-- Dashboard panels without an explicit legend now default to the `instance` label instead of showing the raw metric name and label set
-
 ## [0.1.0] - 2026-09-18
 
 ### Added
